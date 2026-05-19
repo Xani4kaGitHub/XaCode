@@ -211,7 +211,8 @@ async function main() {
     case 'help':
     default:
       printLogo();
-      console.log(`${colors.green}XaCode CLI Enterprise${colors.reset}`);
+      const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '../package.json'), 'utf8'));
+      console.log(`${colors.green}XaCode CLI Enterprise v${pkg.version}${colors.reset}`);
       console.log('Available commands:');
       console.log('  info                        - Show detailed agent metrics, memory, and status');
       console.log('  doctor                      - Run diagnostics');
