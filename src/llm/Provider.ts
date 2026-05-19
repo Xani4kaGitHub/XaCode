@@ -41,7 +41,7 @@ class DeepSeekProvider implements LLMProvider {
       try {
         const start = Date.now();
         const response = await this.openai.chat.completions.create({
-          model: 'deepseek-chat',
+          model: config.DEEPSEEK_MODEL || 'deepseek-chat',
           messages: request.messages,
           tools: request.tools,
           tool_choice: request.tools && request.tools.length > 0 ? 'auto' : 'none',
