@@ -23,7 +23,9 @@ export class SecurityManager {
    */
   isPathAllowed(targetPath: string): boolean {
     const resolvedPath = path.resolve(targetPath);
-    return resolvedPath.startsWith(this.sandboxDir);
+    // Ensure the path is exactly the sandbox dir or is inside it
+    if (resolvedPath === this.sandboxDir) return true;
+    return resolvedPath.startsWith(this.sandboxDir + path.sep);
   }
 
   /**
