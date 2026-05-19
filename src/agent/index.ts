@@ -6,13 +6,17 @@ import { llmProvider } from '../llm/Provider';
 import { agentStateMachine, AgentState } from './StateMachine';
 
 export class AgentCore {
+  private isExecuting: boolean = false;
+
   async handleTask(task: string, statusCallback: (msg: string) => void) {
-    if (agentStateMachine.getState() === AgentState.RUNNING) {
+    if (this.isExecuting) {
       statusCallback('Agent is already executing a task. Use /stop to cancel.');
       return;
     }
 
-    agentStateMachine.transition(AgentState.RUNNING);
+    this.isExecuting = true;
+    agentStateMachine.reset();
+    agentStateMachine.transition(AgentState.ANALYZING_TASK);
     memoryManager.setTask(task);
     statusCallback(`[Started] Task: ${task}\nAnalyzing...`);
 
@@ -36,6 +40,7 @@ When the task is complete, return a clear summary and explicitly state that the 
       statusCallback(`[Error] Agent crashed: ${e.message}`);
       memoryManager.failTask();
     } finally {
+      this.isExecuting = false;
       if (agentStateMachine.getState() !== AgentState.STOPPED) {
         agentStateMachine.transition(AgentState.IDLE);
       }
@@ -46,7 +51,7 @@ When the task is complete, return a clear summary and explicitly state that the 
     let loopCount = 0;
     const MAX_LOOPS = 15;
 
-    while (loopCount < MAX_LOOPS && agentStateMachine.getState() === AgentState.RUNNING) {
+    while (loopCount < MAX_LOOPS && this.isExecuting && agentStateMachine.getState() !== AgentState.STOPPED) {
       loopCount++;
       const messages: any[] = memoryManager.getHistory();
 
@@ -102,7 +107,10 @@ When the task is complete, return a clear summary and explicitly state that the 
   }
 
   stop() {
-    agentStateMachine.transition(AgentState.STOPPED);
+    this.isExecuting = false;
+    if (agentStateMachine.getState() !== AgentState.STOPPED) {
+      agentStateMachine.transition(AgentState.STOPPED);
+    }
     memoryManager.failTask();
   }
 }
