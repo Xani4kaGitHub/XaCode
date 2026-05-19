@@ -2,6 +2,7 @@
 import net from 'net';
 import fs from 'fs';
 import path from 'path';
+import { spawn } from 'child_process';
 
 // ANSI escape codes for basic colors
 const colors = {
@@ -50,7 +51,6 @@ async function main() {
       const info: any = await sendIPCCommand('info');
       if (info.error) {
         console.error(`${colors.red}Error: ${info.error}${colors.reset}`);
-      } else {
         console.log(`\n${colors.cyan}$$\\   $$\\            $$$$$$\\                  $$\\           
 $$ |  $$ |          $$  __$$\\                 $$ |          
 \\$$\\ $$  | $$$$$$\\  $$ /  \\__| $$$$$$\\   $$$$$$$ | $$$$$$\\  
@@ -59,14 +59,55 @@ $$ |  $$ |          $$  __$$\\                 $$ |
 $$  /\\$$\\ $$  __$$ |$$ |  $$\\ $$ |  $$ |$$ |  $$ |$$   ____|
 $$ /  $$ |\\$$$$$$$ |\\$$$$$$  |\\$$$$$$  |\\$$$$$$$ |\\$$$$$$$\\ 
 \\__|  \\__| \\_______| \\______/  \\______/  \\_______| \\_______|${colors.reset}\n`);
-        console.log(`${colors.green}XaCode Agent Info${colors.reset}`);
-        console.log(`State: ${info.state}`);
-        console.log(`Full Access Mode: ${info.fullAccess ? 'ENABLED' : 'DISABLED'}`);
-        console.log(`Uptime: ${Math.round(info.metrics.uptimeMs / 1000)}s`);
-        console.log(`Tokens Used: ${info.metrics.tokenUsage}`);
-        console.log(`API Cost Estimate: $${info.metrics.apiCost.toFixed(4)}`);
-        console.log(`Memory Usage: ${info.memory.usageTokens} / ${info.memory.maxTokens} tokens`);
+        
+        console.log(`${colors.green}┌────────────────────────────────────────────────────────┐${colors.reset}`);
+        console.log(`${colors.green}│               XACODE ENTERPRISE STATUS                 │${colors.reset}`);
+        console.log(`${colors.green}├────────────────────────────────────────────────────────┤${colors.reset}`);
+        console.log(`${colors.green}│ [ AGENT CORE ]${colors.reset}`);
+        console.log(`│ Current State    : ${info.state === 'IDLE' ? colors.green : colors.yellow}${info.state}${colors.reset}`);
+        console.log(`│ Full Access Mode : ${info.fullAccess ? colors.red + 'ENABLED [UNSAFE]' : colors.green + 'DISABLED [SAFE]'}${colors.reset}`);
+        console.log(`│ Agent Uptime     : ${Math.round(info.metrics.uptimeMs / 1000)} seconds`);
+        console.log(`${colors.green}│${colors.reset}`);
+        console.log(`${colors.green}│ [ MEMORY & CONTEXT ]${colors.reset}`);
+        console.log(`│ Context Window   : ${info.memory.usageTokens} / ${info.memory.maxTokens} tokens`);
+        console.log(`│ Context Usage    : ${Math.round((info.memory.usageTokens / info.memory.maxTokens) * 100)}%`);
+        console.log(`│ Compressed State : ${info.memory.hasSummary ? colors.green + 'Active' : colors.yellow + 'Inactive'}${colors.reset}`);
+        console.log(`${colors.green}│${colors.reset}`);
+        console.log(`${colors.green}│ [ TELEMETRY & METRICS ]${colors.reset}`);
+        console.log(`│ Total API Tokens : ${info.metrics.tokenUsage}`);
+        console.log(`│ API Cost Est.    : $${info.metrics.apiCost.toFixed(4)}`);
+        console.log(`│ LLM Retries      : ${info.metrics.retryCount}`);
+        console.log(`│ Verification Err : ${info.metrics.verificationFailures}`);
+        console.log(`│ Stuck Loops Block: ${info.metrics.stuckLoopDetections}`);
+        console.log(`${colors.green}│${colors.reset}`);
+        console.log(`${colors.green}│ [ SYSTEM ENVIRONMENT ]${colors.reset}`);
+        console.log(`│ Process ID (PID) : ${info.system.pid}`);
+        console.log(`│ Platform & Arch  : ${info.system.platform} (${info.system.arch})`);
+        console.log(`│ Node.js Version  : ${info.system.nodeVersion}`);
+        console.log(`│ Host Uptime      : ${Math.round(info.system.uptime / 60)} minutes`);
+        console.log(`│ Workspace Path   : ${info.system.cwd}`);
+        console.log(`${colors.green}└────────────────────────────────────────────────────────┘${colors.reset}`);
       }
+      break;
+
+    case 'update':
+      console.log(`${colors.yellow}Updating XaCode from GitHub...${colors.reset}`);
+      const updateProc = spawn('sudo', ['bash', 'update.sh'], { stdio: 'inherit', cwd: process.cwd() });
+      updateProc.on('close', (code) => {
+        if (code === 0) console.log(`${colors.green}XaCode successfully updated!${colors.reset}`);
+        else console.error(`${colors.red}Update failed with code ${code}${colors.reset}`);
+      });
+      break;
+
+    case 'uninstall':
+      console.log(`${colors.red}WARNING: This will completely remove XaCode from your system!${colors.reset}`);
+      console.log(`Press Ctrl+C within 5 seconds to abort...`);
+      setTimeout(() => {
+        const uninstallProc = spawn('sudo', ['bash', 'uninstall.sh'], { stdio: 'inherit', cwd: process.cwd() });
+        uninstallProc.on('close', (code) => {
+          if (code === 0) console.log(`${colors.green}XaCode has been uninstalled.${colors.reset}`);
+        });
+      }, 5000);
       break;
 
     case 'doctor':
@@ -87,8 +128,10 @@ $$ /  $$ |\\$$$$$$$ |\\$$$$$$  |\\$$$$$$  |\\$$$$$$$ |\\$$$$$$$\\
 \\__|  \\__| \\_______| \\______/  \\______/  \\_______| \\_______|${colors.reset}\n`);
       console.log(`${colors.green}XaCode CLI Enterprise${colors.reset}`);
       console.log('Available commands:');
-      console.log('  info      - Show agent metrics and status');
+      console.log('  info      - Show detailed agent metrics, memory, and status');
       console.log('  doctor    - Run diagnostics');
+      console.log('  update    - Pull latest code from GitHub and restart service');
+      console.log('  uninstall - Completely remove XaCode service and files');
       console.log('  status    - View current task status');
       console.log('  stop      - Halt agent execution');
       break;

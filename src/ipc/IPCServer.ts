@@ -65,7 +65,15 @@ export class IPCServer {
           metrics: metricsTracker.getMetrics(),
           state: agentStateMachine.getState(),
           memory: contextManager.getMemoryStats(),
-          fullAccess: permissionSystem.isFullAccess()
+          fullAccess: permissionSystem.isFullAccess(),
+          system: {
+            pid: process.pid,
+            nodeVersion: process.version,
+            platform: process.platform,
+            arch: process.arch,
+            uptime: process.uptime(),
+            cwd: process.cwd(),
+          }
         };
       case 'doctor':
         return {
