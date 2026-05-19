@@ -105,7 +105,7 @@ export class IPCServer {
         const ids = String(config.ALLOWED_USER_IDS).split(',').map((id: string) => id.trim()).filter((id: string) => id !== args.id);
         const newIds = ids.join(',');
         banEnv = banEnv.replace(/ALLOWED_USER_IDS=.*/, `ALLOWED_USER_IDS=${newIds}`);
-        config.ALLOWED_USER_IDS = newIds;
+        config.ALLOWED_USER_IDS = newIds.split(',').map(Number).filter(n => !isNaN(n));
         await fs.promises.writeFile(banEnvPath, banEnv);
         return { status: 'OK', message: `User ${args.id} banned. Remaining allowed: ${newIds}` };
 
