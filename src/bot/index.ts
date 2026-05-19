@@ -67,11 +67,21 @@ export class BotService {
           config.DEEPSEEK_MODEL = selectedModel;
           fs.writeFileSync(envPath, envContent);
 
-          await this.bot.editMessageText(`✅ Model successfully switched to: <b>${selectedModel}</b>`, {
-            chat_id: chatId,
-            message_id: query.message.message_id,
-            parse_mode: 'HTML'
+          // We show an alert popup instead of editing the message text to avoid any Telegram parsing errors
+          await this.bot.answerCallbackQuery(query.id, {
+            text: `✅ Model switched to: ${selectedModel}`,
+            show_alert: true
           });
+          
+          // Optionally, edit the message to remove buttons but keep it simple text
+          try {
+            await this.bot.editMessageText(`Model is now: ${selectedModel}`, {
+              chat_id: chatId,
+              message_id: query.message.message_id
+            });
+          } catch (e) {
+            // Ignore edit errors, the popup already succeeded
+          }
         }
       } catch (error: any) {
         logger.error('Callback error:', error.message);
