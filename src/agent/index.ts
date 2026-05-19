@@ -1,24 +1,18 @@
-import OpenAI from 'openai';
 import { config } from '../config';
 import { memoryManager, ChatMessage } from '../memory';
 import { toolDefinitions, executeTool } from '../tools';
 import { logger } from '../logger';
-
-const openai = new OpenAI({
-  apiKey: config.DEEPSEEK_API_KEY,
-  baseURL: 'https://api.deepseek.com', // or the appropriate deepseek base url
-});
+import { llmProvider } from '../llm/Provider';
+import { agentStateMachine, AgentState } from './StateMachine';
 
 export class AgentCore {
-  private isExecuting: boolean = false;
-
   async handleTask(task: string, statusCallback: (msg: string) => void) {
-    if (this.isExecuting) {
+    if (agentStateMachine.getState() === AgentState.RUNNING) {
       statusCallback('Agent is already executing a task. Use /stop to cancel.');
       return;
     }
 
-    this.isExecuting = true;
+    agentStateMachine.transition(AgentState.RUNNING);
     memoryManager.setTask(task);
     statusCallback(`[Started] Task: ${task}\nAnalyzing...`);
 
@@ -30,7 +24,7 @@ When the task is complete, return a clear summary and explicitly state that the 
     // Only reset memory if we don't want continuous context, but user wanted memory.
     // For now we assume continuous conversation memory unless /reset is called.
     if (memoryManager.getHistory().length === 0) {
-      memoryManager.resetSession(systemPrompt);
+      memoryManager.resetSession(systemPrompt, toolDefinitions as any);
     }
     
     memoryManager.addMessage({ role: 'user', content: task });
@@ -42,7 +36,9 @@ When the task is complete, return a clear summary and explicitly state that the 
       statusCallback(`[Error] Agent crashed: ${e.message}`);
       memoryManager.failTask();
     } finally {
-      this.isExecuting = false;
+      if (agentStateMachine.getState() !== AgentState.STOPPED) {
+        agentStateMachine.transition(AgentState.IDLE);
+      }
     }
   }
 
@@ -50,24 +46,25 @@ When the task is complete, return a clear summary and explicitly state that the 
     let loopCount = 0;
     const MAX_LOOPS = 15;
 
-    while (loopCount < MAX_LOOPS && this.isExecuting) {
+    while (loopCount < MAX_LOOPS && agentStateMachine.getState() === AgentState.RUNNING) {
       loopCount++;
       const messages: any[] = memoryManager.getHistory();
 
-      const response = await openai.chat.completions.create({
-        model: config.DEEPSEEK_MODEL,
+      const response = await llmProvider.chatComplete({
         messages: messages,
         tools: toolDefinitions as any,
-        tool_choice: 'auto',
       });
 
-      const message = response.choices[0].message;
-
       // DeepSeek/OpenAI compat structure
-      if (message.tool_calls && message.tool_calls.length > 0) {
-        memoryManager.addMessage(message as unknown as ChatMessage);
+      if (response.toolCalls && response.toolCalls.length > 0) {
+        // Create an assistant message with the tool calls
+        memoryManager.addMessage({
+          role: 'assistant',
+          content: response.content || '',
+          tool_calls: response.toolCalls,
+        });
 
-        for (const toolCall of message.tool_calls) {
+        for (const toolCall of response.toolCalls) {
           const functionName = toolCall.function.name;
           const args = JSON.parse(toolCall.function.arguments);
           
@@ -84,11 +81,11 @@ When the task is complete, return a clear summary and explicitly state that the 
           });
         }
       } else {
-        memoryManager.addMessage({ role: 'assistant', content: message.content || '' });
-        statusCallback(`[Agent] ${message.content}`);
+        memoryManager.addMessage({ role: 'assistant', content: response.content || '' });
+        statusCallback(`[Agent] ${response.content}`);
 
         // Decide if we should stop. A simple heuristic is if the agent says it's done or we don't have tools called.
-        if (message.content?.toLowerCase().includes('task complete') || message.content?.toLowerCase().includes('task is complete')) {
+        if (response.content?.toLowerCase().includes('task complete') || response.content?.toLowerCase().includes('task is complete')) {
           memoryManager.completeTask();
           statusCallback(`[Completed] Task finished.`);
           break;
@@ -105,7 +102,7 @@ When the task is complete, return a clear summary and explicitly state that the 
   }
 
   stop() {
-    this.isExecuting = false;
+    agentStateMachine.transition(AgentState.STOPPED);
     memoryManager.failTask();
   }
 }

@@ -1,4 +1,5 @@
 import { logger } from '../logger';
+import { contextManager } from './ContextManager';
 
 export interface TaskContext {
   originalRequest: string;
@@ -10,13 +11,12 @@ export interface TaskContext {
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'system' | 'tool';
   content: string;
-  name?: string; // used for tool names
-  tool_calls?: any[]; // For DeepSeek
+  name?: string;
+  tool_calls?: any[];
   tool_call_id?: string;
 }
 
 export class MemoryManager {
-  private history: ChatMessage[] = [];
   private taskContext: TaskContext = {
     originalRequest: '',
     currentStep: 'Waiting for task',
@@ -27,8 +27,8 @@ export class MemoryManager {
   /**
    * Initializes a new session, clearing past history but keeping system prompts.
    */
-  resetSession(systemPrompt: string) {
-    this.history = [{ role: 'system', content: systemPrompt }];
+  resetSession(systemPrompt: string, tools: any[] = []) {
+    contextManager.init(systemPrompt, tools);
     this.taskContext = {
       originalRequest: '',
       currentStep: 'Waiting for task',
@@ -39,16 +39,11 @@ export class MemoryManager {
   }
 
   addMessage(message: ChatMessage) {
-    this.history.push(message);
-    // Keep history from growing indefinitely (optional, basic truncation)
-    if (this.history.length > 50) {
-      // keep system prompt (index 0) and remove oldest messages
-      this.history.splice(1, 10);
-    }
+    contextManager.addMessage(message);
   }
 
   getHistory(): ChatMessage[] {
-    return this.history;
+    return contextManager.getMessagesForLLM();
   }
 
   setTask(request: string) {
