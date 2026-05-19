@@ -66,10 +66,10 @@ export class BotService {
         config.DEEPSEEK_MODEL = selectedModel;
         fs.writeFileSync(envPath, envContent);
 
-        await this.bot.editMessageText(`✅ Model successfully switched to: **${selectedModel}**`, {
+        await this.bot.editMessageText(`✅ Model successfully switched to: <b>${selectedModel}</b>`, {
           chat_id: chatId,
           message_id: query.message.message_id,
-          parse_mode: 'Markdown'
+          parse_mode: 'HTML'
         });
       }
       
