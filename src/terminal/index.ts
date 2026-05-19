@@ -2,6 +2,7 @@ import { spawn, ChildProcessWithoutNullStreams } from 'child_process';
 import { logger } from '../logger';
 import { config } from '../config';
 import { securityManager } from '../security';
+import { permissionSystem } from '../security/PermissionSystem';
 
 export class TerminalManager {
   private activeProcesses: Map<string, ChildProcessWithoutNullStreams> = new Map();
@@ -10,12 +11,12 @@ export class TerminalManager {
    * Executes a command with a timeout and returns its output.
    */
   async runCommand(command: string, cwd: string = config.SANDBOX_DIR): Promise<{ stdout: string, stderr: string, code: number }> {
-    if (!securityManager.isCommandAllowed(command)) {
-      throw new Error(`Command rejected by security manager: ${command}`);
+    if (!permissionSystem.canExecute(command)) {
+      throw new Error(`Command rejected by Permission System: ${command}. Type /fullaccess enable to run dangerous commands.`);
     }
 
-    if (!securityManager.isPathAllowed(cwd)) {
-      throw new Error(`Execution outside sandbox is forbidden: ${cwd}`);
+    if (!permissionSystem.isFullAccess() && !securityManager.isPathAllowed(cwd)) {
+      throw new Error(`Execution outside sandbox is forbidden: ${cwd}. Type /fullaccess enable to allow.`);
     }
 
     logger.info(`Executing command: ${command}`, { cwd });

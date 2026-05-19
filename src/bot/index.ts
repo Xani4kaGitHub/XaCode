@@ -37,8 +37,12 @@ export class BotService {
       }
 
       // Handle normal task
-      const statusCallback = (updateMsg: string) => {
-        this.bot.sendMessage(chatId, updateMsg).catch(err => logger.error('Failed to send telegram msg:', err));
+      const statusCallback = async (updateMsg: string) => {
+        try {
+          await this.sendChunkedMessage(chatId, updateMsg);
+        } catch (err) {
+          logger.error('Failed to send telegram msg:', err);
+        }
       };
 
       agentCore.handleTask(text, statusCallback);
@@ -233,6 +237,24 @@ export class BotService {
         break;
       default:
         await this.bot.sendMessage(chatId, 'Unknown command.');
+    }
+  }
+
+  /**
+   * Helper to send long messages bypassing the 4096 character Telegram limit
+   */
+  private async sendChunkedMessage(chatId: number, text: string) {
+    const MAX_LENGTH = 4000;
+    if (text.length <= MAX_LENGTH) {
+      await this.bot.sendMessage(chatId, text);
+      return;
+    }
+
+    let remaining = text;
+    while (remaining.length > 0) {
+      const chunk = remaining.substring(0, MAX_LENGTH);
+      remaining = remaining.substring(MAX_LENGTH);
+      await this.bot.sendMessage(chatId, chunk);
     }
   }
 }
