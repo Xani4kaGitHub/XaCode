@@ -45,15 +45,27 @@ export class BotService {
     });
 
     this.bot.on('callback_query', async (query) => {
+      logger.info(`Received callback query: ${JSON.stringify(query)}`);
       try {
-        if (!query.message || !query.data) return;
+        if (!query.message || !query.data) {
+          logger.warn('Callback query missing message or data');
+          return;
+        }
         const chatId = query.message.chat.id;
         const userId = query.from.id;
 
-        if (!securityManager.isUserAllowed(userId)) return;
+        logger.info(`Callback from user ${userId}, data: ${query.data}`);
+
+        if (!securityManager.isUserAllowed(userId)) {
+          logger.warn(`User ${userId} not allowed for callback`);
+          return;
+        }
+
+        logger.info('User allowed, processing model switch...');
 
         if (query.data.startsWith('model:')) {
           const selectedModel = query.data.split(':')[1];
+          logger.info(`Selected model: ${selectedModel}`);
           
           // Update in memory and file
           const envPath = require('path').join(process.cwd(), '.env');
@@ -67,24 +79,29 @@ export class BotService {
           config.DEEPSEEK_MODEL = selectedModel;
           fs.writeFileSync(envPath, envContent);
 
+          logger.info('Model switch complete, showing alert popup.');
           // We show an alert popup instead of editing the message text to avoid any Telegram parsing errors
           await this.bot.answerCallbackQuery(query.id, {
             text: `✅ Model switched to: ${selectedModel}`,
             show_alert: true
           });
           
+          logger.info('Attempting to edit message text...');
           // Optionally, edit the message to remove buttons but keep it simple text
           try {
             await this.bot.editMessageText(`Model is now: ${selectedModel}`, {
               chat_id: chatId,
               message_id: query.message.message_id
             });
-          } catch (e) {
-            // Ignore edit errors, the popup already succeeded
+            logger.info('Message text edited successfully.');
+          } catch (e: any) {
+            logger.error(`Ignored edit error: ${e.message}`);
           }
+        } else {
+          logger.warn(`Unknown callback data: ${query.data}`);
         }
       } catch (error: any) {
-        logger.error('Callback error:', error.message);
+        logger.error(`Callback error: ${error.message}`);
         if (query.message) {
           await this.bot.sendMessage(query.message.chat.id, `❌ Error switching model: ${error.message}`);
         }
