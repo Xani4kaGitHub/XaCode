@@ -1,4 +1,6 @@
 import { eventBus, EVENTS } from '../events/EventBus';
+import fs from 'fs';
+import path from 'path';
 
 export interface Metrics {
   tokenUsage: number;
@@ -23,8 +25,28 @@ export class MetricsTracker {
 
   private startTime: number = Date.now();
 
+  private metricsFile = path.join(process.cwd(), '.xacode_metrics.json');
+  private persistentMetrics = { tokenUsage: 0, apiCost: 0 };
+
   constructor() {
     this.setupListeners();
+    this.loadPersistentMetrics();
+  }
+
+  private loadPersistentMetrics() {
+    try {
+      if (fs.existsSync(this.metricsFile)) {
+        const data = JSON.parse(fs.readFileSync(this.metricsFile, 'utf8'));
+        this.persistentMetrics.tokenUsage = data.tokenUsage || 0;
+        this.persistentMetrics.apiCost = data.apiCost || 0;
+      }
+    } catch (e) {}
+  }
+
+  private savePersistentMetrics() {
+    try {
+      fs.writeFileSync(this.metricsFile, JSON.stringify(this.persistentMetrics, null, 2));
+    } catch (e) {}
   }
 
   private setupListeners() {
@@ -35,6 +57,9 @@ export class MetricsTracker {
   addTokens(count: number, costEstimate: number = 0) {
     this.metrics.tokenUsage += count;
     this.metrics.apiCost += costEstimate;
+    this.persistentMetrics.tokenUsage += count;
+    this.persistentMetrics.apiCost += costEstimate;
+    this.savePersistentMetrics();
   }
 
   addRetry() {
@@ -50,6 +75,10 @@ export class MetricsTracker {
       ...this.metrics,
       uptimeMs: Date.now() - this.startTime,
     };
+  }
+
+  getPersistentMetrics() {
+    return this.persistentMetrics;
   }
 
   reset() {

@@ -208,6 +208,37 @@ async function main() {
       process.exit(0);
       break;
 
+    case 'cost':
+      console.log(`${colors.cyan}Fetching financial metrics...${colors.reset}`);
+      const costInfo: any = await sendIPCCommand('cost');
+      printLogo();
+      console.log(`${colors.green}┌────────────────────────────────────────────────────────┐${colors.reset}`);
+      console.log(`${colors.green}│               XACODE FINANCIAL ANALYTICS               │${colors.reset}`);
+      console.log(`${colors.green}├────────────────────────────────────────────────────────┤${colors.reset}`);
+      console.log(`${colors.green}│ [ ALL-TIME USAGE (Persistent) ]${colors.reset}`);
+      console.log(`│ Total API Tokens : ${costInfo.persistent.tokenUsage.toLocaleString()}`);
+      console.log(`│ Total API Cost   : $${costInfo.persistent.apiCost.toFixed(4)}`);
+      console.log(`${colors.green}│${colors.reset}`);
+      console.log(`${colors.green}│ [ CURRENT SESSION ]${colors.reset}`);
+      console.log(`│ Session Tokens   : ${costInfo.session.tokenUsage.toLocaleString()}`);
+      console.log(`│ Session Cost     : $${costInfo.session.apiCost.toFixed(4)}`);
+      console.log(`${colors.green}└────────────────────────────────────────────────────────┘${colors.reset}\n`);
+      process.exit(0);
+      break;
+
+    case 'sandbox':
+      const sandboxAction = args[1];
+      if (sandboxAction === 'clear') {
+        console.log(`${colors.yellow}Clearing sandbox directory...${colors.reset}`);
+        const sbRes: any = await sendIPCCommand('sandbox_clear');
+        console.log(`${colors.green}${sbRes.message}${colors.reset}`);
+      } else {
+        console.error(`${colors.red}Usage: xacode sandbox clear${colors.reset}`);
+        process.exit(1);
+      }
+      process.exit(0);
+      break;
+
     case 'logs':
       console.log(`${colors.cyan}Streaming XaCode logs (Press Ctrl+C to exit)...${colors.reset}`);
       spawn('sudo', ['journalctl', '-u', 'xacode', '-f'], { stdio: 'inherit' });
@@ -240,10 +271,12 @@ async function main() {
       console.log(`${colors.green}XaCode CLI Enterprise v${pkg.version}${colors.reset}`);
       console.log('Available commands:');
       console.log('  info                        - Show detailed agent metrics, memory, and status');
+      console.log('  cost                        - Show persistent API cost analytics');
       console.log('  doctor                      - Run diagnostics');
       console.log('  models                      - View available models and pricing');
       console.log('  update                      - Pull latest code from GitHub and restart service');
       console.log('  uninstall                   - Completely remove XaCode service and files');
+      console.log('  sandbox clear               - Wipes the sandbox directory clean');
       console.log('  auth <telegram|deepseek|model> <val> - Update API tokens or active model');
       console.log('  ban <telegram_id>           - Ban a user ID from accessing the bot');
       console.log('  logs                        - Stream live agent logs');

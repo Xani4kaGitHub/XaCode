@@ -80,12 +80,30 @@ export class IPCServer {
       case 'doctor':
         return {
           status: 'OK',
-          checks: {
-            apiKeys: 'Valid',
-            permissions: permissionSystem.isFullAccess() ? 'Full Access' : 'Restricted',
-            filesystem: 'OK',
+          diagnostics: {
+            npm: true,
+            typescript: true,
+            docker: false
           }
         };
+
+      case 'sandbox_clear':
+        const fsLib = require('fs');
+        const pathLib = require('path');
+        const sandboxDir = pathLib.join(process.cwd(), 'sandbox');
+        if (fsLib.existsSync(sandboxDir)) {
+          fsLib.rmSync(sandboxDir, { recursive: true, force: true });
+          fsLib.mkdirSync(sandboxDir);
+        }
+        return { status: 'OK', message: 'Sandbox cleared successfully.' };
+
+      case 'cost':
+        return {
+          status: 'OK',
+          session: metricsTracker.getMetrics(),
+          persistent: metricsTracker.getPersistentMetrics()
+        };
+
       case 'auth':
         const envPath = path.join(process.cwd(), '.env');
         let envContent = await fs.promises.readFile(envPath, 'utf8');

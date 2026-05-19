@@ -136,6 +136,34 @@ export class BotService {
           }
         });
         break;
+      case '/sandbox':
+        const sbArg = text.split(' ')[1];
+        if (sbArg === 'clear') {
+          const fs = require('fs');
+          const path = require('path');
+          const sandboxDir = path.join(process.cwd(), 'sandbox');
+          if (fs.existsSync(sandboxDir)) {
+            fs.rmSync(sandboxDir, { recursive: true, force: true });
+            fs.mkdirSync(sandboxDir);
+          }
+          await this.bot.sendMessage(chatId, '🧹 Sandbox directory has been securely cleared.');
+        } else {
+          await this.bot.sendMessage(chatId, 'Usage: `/sandbox clear`', { parse_mode: 'Markdown' });
+        }
+        break;
+      case '/cost':
+        const { metricsTracker } = require('../metrics/MetricsTracker');
+        const session = metricsTracker.getMetrics();
+        const persistent = metricsTracker.getPersistentMetrics();
+        const costMsg = `💰 **XaCode Financial Analytics**\n\n`
+          + `*All-Time Usage (Persistent):*\n`
+          + `- Total Tokens: ${persistent.tokenUsage.toLocaleString()}\n`
+          + `- Total Cost: $${persistent.apiCost.toFixed(4)}\n\n`
+          + `*Current Session:*\n`
+          + `- Session Tokens: ${session.tokenUsage.toLocaleString()}\n`
+          + `- Session Cost: $${session.apiCost.toFixed(4)}`;
+        await this.bot.sendMessage(chatId, costMsg, { parse_mode: 'Markdown' });
+        break;
       case '/terminal':
         await this.bot.sendMessage(chatId, 'Active background processes are managed automatically. Check logs for details.');
         break;
