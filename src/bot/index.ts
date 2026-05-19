@@ -172,24 +172,33 @@ export class BotService {
         await this.bot.sendMessage(chatId, `Modified Files:\n${files.length > 0 ? files.join('\n') : 'No files modified yet.'}`);
         break;
       case '/model':
-        const modelMsg = `🧠 **DeepSeek Model Selection**\n\n`
-          + `Current active model: \`${config.DEEPSEEK_MODEL}\`\n\n`
-          + `*Promo Prices (Ukraine, May 2026):*\n`
-          + `🚀 **V4 Pro**: $0.435 (In) / $0.87 (Out)\n`
-          + `⚡ **V4 Flash**: $0.14 (In) / $0.28 (Out)\n\n`
-          + `Select the model you want to use:`;
-          
-        await this.bot.sendMessage(chatId, modelMsg, {
-          parse_mode: 'Markdown',
-          reply_markup: {
-            inline_keyboard: [
-              [
-                { text: '🚀 V4 Pro ($0.435)', callback_data: 'model:deepseek-v4-pro' },
-                { text: '⚡ V4 Flash ($0.14)', callback_data: 'model:deepseek-v4-flash' }
-              ]
-            ]
+        const modelArg = text.split(' ')[1];
+        if (modelArg) {
+          // Update in memory and file
+          const envPath = require('path').join(process.cwd(), '.env');
+          const fs = require('fs');
+          let envContent = fs.readFileSync(envPath, 'utf8');
+          if (!envContent.includes('DEEPSEEK_MODEL=')) {
+            envContent += `\nDEEPSEEK_MODEL=${modelArg}`;
+          } else {
+            envContent = envContent.replace(/DEEPSEEK_MODEL=.*/, `DEEPSEEK_MODEL=${modelArg}`);
           }
-        });
+          config.DEEPSEEK_MODEL = modelArg;
+          fs.writeFileSync(envPath, envContent);
+
+          await this.bot.sendMessage(chatId, `✅ Model successfully switched to: ${modelArg}`);
+        } else {
+          const modelMsg = `🧠 **DeepSeek Model Selection**\n\n`
+            + `Current active model: \`${config.DEEPSEEK_MODEL}\`\n\n`
+            + `*Promo Prices (Ukraine, May 2026):*\n`
+            + `🚀 **V4 Pro**: $0.435 (In) / $0.87 (Out)\n`
+            + `⚡ **V4 Flash**: $0.14 (In) / $0.28 (Out)\n\n`
+            + `To switch models, type:\n`
+            + `/model deepseek-v4-pro\n`
+            + `/model deepseek-v4-flash`;
+            
+          await this.bot.sendMessage(chatId, modelMsg, { parse_mode: 'Markdown' });
+        }
         break;
       case '/sandbox':
         const sbArg = text.split(' ')[1];
