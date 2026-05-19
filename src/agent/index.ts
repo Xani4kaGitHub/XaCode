@@ -54,9 +54,11 @@ CRITICAL RULES:
   private async runLoop(statusCallback: (msg: string) => void) {
     let loopCount = 0;
     const MAX_LOOPS = 15;
+    let recentActions: string[] = [];
 
     while (loopCount < MAX_LOOPS && this.isExecuting && agentStateMachine.getState() !== AgentState.STOPPED) {
       loopCount++;
+      await memoryManager.ensureCompressed();
       const messages: any[] = memoryManager.getHistory();
 
       const response = await llmProvider.chatComplete({
@@ -75,7 +77,36 @@ CRITICAL RULES:
 
         for (const toolCall of response.toolCalls) {
           const functionName = toolCall.function.name;
-          const args = JSON.parse(toolCall.function.arguments);
+          let args: any;
+          try {
+            args = JSON.parse(toolCall.function.arguments);
+          } catch (e: any) {
+            statusCallback(`[Tool Error] JSON syntax error in arguments for ${functionName}.`);
+            logger.error(`JSON parse error for tool ${functionName}`, e);
+            memoryManager.addMessage({
+              role: 'tool',
+              tool_call_id: toolCall.id,
+              name: functionName,
+              content: 'Error: Invalid JSON syntax in tool call arguments. Please fix your JSON and try again.'
+            });
+            continue;
+          }
+          
+          // Infinite retry hallucination protection
+          const actionHash = `${functionName}:${JSON.stringify(args)}`;
+          recentActions.push(actionHash);
+          if (recentActions.length > 5) recentActions.shift();
+          
+          const duplicateCount = recentActions.filter(a => a === actionHash).length;
+          if (duplicateCount >= 3) {
+            memoryManager.addMessage({
+              role: 'tool',
+              tool_call_id: toolCall.id,
+              name: functionName,
+              content: '[SYSTEM WARNING] You have executed this exact same tool with these exact same arguments 3 times in a row. You are stuck in a loop. STOP doing this and try a completely different approach, or ask the user for help.'
+            });
+            continue;
+          }
           
           statusCallback(`[Tool Call] ${functionName}\n${JSON.stringify(args)}`);
           logger.info(`Executing tool ${functionName}`, args);

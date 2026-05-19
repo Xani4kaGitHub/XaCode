@@ -33,7 +33,10 @@ export class ContextManager {
 
   addMessage(msg: any) {
     this.shortTermHistory.push(msg);
-    this.checkAndCompress();
+  }
+
+  async ensureCompressed() {
+    await this.checkAndCompress();
   }
 
   getMessagesForLLM(): any[] {
@@ -66,10 +69,27 @@ export class ContextManager {
   private async compressMemory() {
     eventBus.emit(EVENTS.CONTEXT_COMPRESSED);
 
-    // Keep the last N messages that are highly relevant (execution state, errors)
-    // and summarize the rest.
-    const messagesToSummarize = this.shortTermHistory.slice(0, -10); // Keep last 10
-    const messagesToKeep = this.shortTermHistory.slice(-10);
+    // Determine safe split index (keep ~10 messages, but don't split tools)
+    let splitIndex = Math.max(0, this.shortTermHistory.length - 10);
+    
+    // Walk backward to ensure we don't split a tool call from its response
+    while (splitIndex > 0 && splitIndex < this.shortTermHistory.length) {
+      const msg = this.shortTermHistory[splitIndex];
+      // If the current message is a tool result, we MUST include the assistant message that called it
+      if (msg.role === 'tool') {
+        splitIndex--;
+      } 
+      // If the current message is an assistant with tool_calls, we MUST include it (which we do if we stop here)
+      else if (msg.role === 'assistant' && msg.tool_calls) {
+        break; // Safe boundary, the tool calls are kept, and the preceding messages can be summarized
+      } 
+      else {
+        break; // Safe boundary
+      }
+    }
+
+    const messagesToSummarize = this.shortTermHistory.slice(0, splitIndex);
+    const messagesToKeep = this.shortTermHistory.slice(splitIndex);
 
     if (messagesToSummarize.length === 0) return; // Nothing to compress
 

@@ -42,6 +42,10 @@ export class MemoryManager {
     contextManager.addMessage(message);
   }
 
+  async ensureCompressed() {
+    await contextManager.ensureCompressed();
+  }
+
   getHistory(): ChatMessage[] {
     return contextManager.getMessagesForLLM();
   }

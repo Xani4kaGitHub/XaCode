@@ -31,7 +31,9 @@ export class TerminalManager {
       const shell = process.platform === 'win32' ? 'cmd.exe' : '/bin/bash';
       const shellArgs = process.platform === 'win32' ? ['/c', command] : ['-c', `${resourceLimits}${command}`];
 
-      const child = spawn(shell, shellArgs, { cwd });
+      // Use detached: true on non-Windows to create a new process group for clean killing of descendants
+      const isWin = process.platform === 'win32';
+      const child = spawn(shell, shellArgs, { cwd, detached: !isWin });
       const processId = child.pid?.toString() || Math.random().toString();
       this.activeProcesses.set(processId, child);
 
@@ -40,16 +42,19 @@ export class TerminalManager {
 
       child.stdout.on('data', (data) => {
         stdout += data.toString();
+        // Truncate on the fly to prevent massive memory usage
+        if (stdout.length > 10000) stdout = stdout.slice(-8000);
       });
 
       child.stderr.on('data', (data) => {
         stderr += data.toString();
+        if (stderr.length > 10000) stderr = stderr.slice(-8000);
       });
 
       const timeoutId = setTimeout(() => {
         if (this.activeProcesses.has(processId)) {
           logger.warn(`Command timed out after ${config.MAX_EXECUTION_TIMEOUT_MS}ms: ${command}`);
-          child.kill('SIGKILL');
+          this.killChildSafely(child, isWin);
           resolve({ stdout, stderr: stderr + '\n[TIMEOUT KILLED]', code: 124 });
           this.activeProcesses.delete(processId);
         }
@@ -58,7 +63,7 @@ export class TerminalManager {
       child.on('close', (code) => {
         clearTimeout(timeoutId);
         this.activeProcesses.delete(processId);
-        resolve({ stdout, stderr, code: code ?? 1 });
+        resolve({ stdout: stdout.slice(-8000), stderr: stderr.slice(-8000), code: code ?? 1 });
       });
 
       child.on('error', (err) => {
@@ -70,9 +75,23 @@ export class TerminalManager {
   }
 
   killAll() {
-    for (const [pid, process] of this.activeProcesses.entries()) {
-      process.kill('SIGKILL');
+    const isWin = process.platform === 'win32';
+    for (const [pid, child] of this.activeProcesses.entries()) {
+      this.killChildSafely(child, isWin);
       this.activeProcesses.delete(pid);
+    }
+  }
+
+  private killChildSafely(child: ChildProcessWithoutNullStreams, isWin: boolean) {
+    try {
+      if (!isWin && child.pid) {
+        // Kill the entire process group
+        process.kill(-child.pid, 'SIGKILL');
+      } else {
+        child.kill('SIGKILL');
+      }
+    } catch (e: any) {
+      logger.error(`Error killing process ${child.pid}: ${e.message}`);
     }
   }
 }
