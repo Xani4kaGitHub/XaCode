@@ -53,10 +53,6 @@ echo "Setting up global CLI command (xacode)..."
 chmod +x dist/cli.js
 sudo ln -sf $(pwd)/dist/cli.js /usr/local/bin/xacode
 
-echo "Setting up bash tab-completion..."
-sudo cp $(pwd)/xacode_completion.sh /etc/bash_completion.d/xacode || true
-source /etc/bash_completion.d/xacode || true
-
 echo "Setting up systemd service..."
 SERVICE_FILE=/etc/systemd/system/xacode.service
 

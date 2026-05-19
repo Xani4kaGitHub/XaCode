@@ -183,6 +183,31 @@ async function main() {
       console.log(`${colors.green}${banRes.message}${colors.reset}`);
       break;
 
+    case 'models':
+      printLogo();
+      const envPath = path.join(process.cwd(), '.env');
+      let currentModel = 'deepseek-v4-pro';
+      if (fs.existsSync(envPath)) {
+        const envContent = fs.readFileSync(envPath, 'utf8');
+        const match = envContent.match(/DEEPSEEK_MODEL=(.*)/);
+        if (match) currentModel = match[1];
+      }
+      
+      console.log(`${colors.cyan}🧠 DeepSeek Model Selection (May 2026 Promo) ${colors.reset}`);
+      console.log(`Current active model: ${colors.green}${currentModel}${colors.reset}\n`);
+      
+      console.log(`${colors.yellow}🚀 V4 Pro (Recommended)${colors.reset}`);
+      console.log(`  Input (Cache Miss) : $0.435 / 1M tokens`);
+      console.log(`  Output             : $0.870 / 1M tokens`);
+      console.log(`  Command            : xacode auth model deepseek-v4-pro\n`);
+
+      console.log(`${colors.cyan}⚡ V4 Flash${colors.reset}`);
+      console.log(`  Input (Cache Miss) : $0.140 / 1M tokens`);
+      console.log(`  Output             : $0.280 / 1M tokens`);
+      console.log(`  Command            : xacode auth model deepseek-v4-flash\n`);
+      process.exit(0);
+      break;
+
     case 'logs':
       console.log(`${colors.cyan}Streaming XaCode logs (Press Ctrl+C to exit)...${colors.reset}`);
       spawn('sudo', ['journalctl', '-u', 'xacode', '-f'], { stdio: 'inherit' });
@@ -216,6 +241,7 @@ async function main() {
       console.log('Available commands:');
       console.log('  info                        - Show detailed agent metrics, memory, and status');
       console.log('  doctor                      - Run diagnostics');
+      console.log('  models                      - View available models and pricing');
       console.log('  update                      - Pull latest code from GitHub and restart service');
       console.log('  uninstall                   - Completely remove XaCode service and files');
       console.log('  auth <telegram|deepseek|model> <val> - Update API tokens or active model');
