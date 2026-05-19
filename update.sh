@@ -1,6 +1,9 @@
 #!/bin/bash
 set -e
 
+echo "Configuring git safe directory..."
+git config --global --add safe.directory $(pwd)
+
 echo "Pulling latest changes from GitHub..."
 git pull
 

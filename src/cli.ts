@@ -31,13 +31,22 @@ async function sendIPCCommand(command: string, args: any = {}) {
       client.write(JSON.stringify({ token, command, args }));
     });
 
+    const timeout = setTimeout(() => {
+      client.destroy();
+      reject(new Error('IPC Request timed out. The XaCode agent is not responding.'));
+    }, 5000);
+
     let data = '';
     client.on('data', (chunk) => data += chunk.toString());
     client.on('end', () => {
+      clearTimeout(timeout);
       try { resolve(JSON.parse(data)); }
       catch (e) { reject(new Error('Invalid JSON from IPC server')); }
     });
-    client.on('error', (err) => reject(err));
+    client.on('error', (err) => {
+      clearTimeout(timeout);
+      reject(err);
+    });
   });
 }
 
@@ -88,6 +97,7 @@ $$ /  $$ |\\$$$$$$$ |\\$$$$$$  |\\$$$$$$  |\\$$$$$$$ |\\$$$$$$$\\
         console.log(`│ Workspace Path   : ${info.system.cwd}`);
         console.log(`${colors.green}└────────────────────────────────────────────────────────┘${colors.reset}`);
       }
+      process.exit(0);
       break;
 
     case 'update':
@@ -114,6 +124,7 @@ $$ /  $$ |\\$$$$$$$ |\\$$$$$$  |\\$$$$$$  |\\$$$$$$$ |\\$$$$$$$\\
       console.log(`${colors.yellow}Running diagnostics...${colors.reset}`);
       const doc: any = await sendIPCCommand('doctor');
       console.log(JSON.stringify(doc, null, 2));
+      process.exit(0);
       break;
 
     case 'auth':
