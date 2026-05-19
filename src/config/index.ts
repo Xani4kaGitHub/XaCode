@@ -1,0 +1,25 @@
+import dotenv from 'dotenv';
+import path from 'path';
+
+// Load .env
+dotenv.config();
+
+export const config = {
+  TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN || '',
+  DEEPSEEK_API_KEY: process.env.DEEPSEEK_API_KEY || '',
+  ALLOWED_USER_IDS: (process.env.ALLOWED_USER_IDS || '').split(',').map(id => parseInt(id.trim(), 10)).filter(id => !isNaN(id)),
+  SANDBOX_DIR: process.env.SANDBOX_DIR || path.resolve(process.cwd(), 'sandbox'),
+  MAX_EXECUTION_TIMEOUT_MS: parseInt(process.env.MAX_EXECUTION_TIMEOUT_MS || '30000', 10),
+};
+
+export function validateConfig() {
+  if (!config.TELEGRAM_BOT_TOKEN) {
+    throw new Error('TELEGRAM_BOT_TOKEN is missing in environment variables');
+  }
+  if (!config.DEEPSEEK_API_KEY) {
+    throw new Error('DEEPSEEK_API_KEY is missing in environment variables');
+  }
+  if (config.ALLOWED_USER_IDS.length === 0) {
+    console.warn('WARNING: ALLOWED_USER_IDS is empty. No one will be able to use the bot.');
+  }
+}
