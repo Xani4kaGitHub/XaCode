@@ -99,7 +99,6 @@ $$ /  $$ |\\$$$$$$$ |\\$$$$$$  |\\$$$$$$  |\\$$$$$$$ |\\$$$$$$$\\
         console.log(`│ Host Uptime      : ${Math.round(info.system.uptime / 60)} minutes`);
         console.log(`│ Workspace Path   : ${info.system.cwd}`);
         console.log(`${colors.green}└────────────────────────────────────────────────────────┘${colors.reset}`);
-      }
       process.exit(0);
       break;
 
