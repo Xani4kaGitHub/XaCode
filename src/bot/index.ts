@@ -45,35 +45,42 @@ export class BotService {
     });
 
     this.bot.on('callback_query', async (query) => {
-      if (!query.message || !query.data) return;
-      const chatId = query.message.chat.id;
-      const userId = query.from.id;
+      try {
+        if (!query.message || !query.data) return;
+        const chatId = query.message.chat.id;
+        const userId = query.from.id;
 
-      if (!securityManager.isUserAllowed(userId)) return;
+        if (!securityManager.isUserAllowed(userId)) return;
 
-      if (query.data.startsWith('model:')) {
-        const selectedModel = query.data.split(':')[1];
-        
-        // Update in memory and file
-        const envPath = require('path').join(process.cwd(), '.env');
-        const fs = require('fs');
-        let envContent = fs.readFileSync(envPath, 'utf8');
-        if (!envContent.includes('DEEPSEEK_MODEL=')) {
-          envContent += `\nDEEPSEEK_MODEL=${selectedModel}`;
-        } else {
-          envContent = envContent.replace(/DEEPSEEK_MODEL=.*/, `DEEPSEEK_MODEL=${selectedModel}`);
+        if (query.data.startsWith('model:')) {
+          const selectedModel = query.data.split(':')[1];
+          
+          // Update in memory and file
+          const envPath = require('path').join(process.cwd(), '.env');
+          const fs = require('fs');
+          let envContent = fs.readFileSync(envPath, 'utf8');
+          if (!envContent.includes('DEEPSEEK_MODEL=')) {
+            envContent += `\nDEEPSEEK_MODEL=${selectedModel}`;
+          } else {
+            envContent = envContent.replace(/DEEPSEEK_MODEL=.*/, `DEEPSEEK_MODEL=${selectedModel}`);
+          }
+          config.DEEPSEEK_MODEL = selectedModel;
+          fs.writeFileSync(envPath, envContent);
+
+          await this.bot.editMessageText(`✅ Model successfully switched to: <b>${selectedModel}</b>`, {
+            chat_id: chatId,
+            message_id: query.message.message_id,
+            parse_mode: 'HTML'
+          });
         }
-        config.DEEPSEEK_MODEL = selectedModel;
-        fs.writeFileSync(envPath, envContent);
-
-        await this.bot.editMessageText(`✅ Model successfully switched to: <b>${selectedModel}</b>`, {
-          chat_id: chatId,
-          message_id: query.message.message_id,
-          parse_mode: 'HTML'
-        });
+      } catch (error: any) {
+        logger.error('Callback error:', error.message);
+        if (query.message) {
+          await this.bot.sendMessage(query.message.chat.id, `❌ Error switching model: ${error.message}`);
+        }
+      } finally {
+        this.bot.answerCallbackQuery(query.id).catch(() => {});
       }
-      
-      this.bot.answerCallbackQuery(query.id);
     });
   }
 
