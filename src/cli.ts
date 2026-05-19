@@ -60,7 +60,10 @@ async function main() {
       const info: any = await sendIPCCommand('info');
       if (info.error) {
         console.error(`${colors.red}Error: ${info.error}${colors.reset}`);
-        console.log(`\n${colors.cyan}$$\\   $$\\            $$$$$$\\                  $$\\           
+        process.exit(1);
+      }
+      
+      console.log(`\n${colors.cyan}$$\\   $$\\            $$$$$$\\                  $$\\           
 $$ |  $$ |          $$  __$$\\                 $$ |          
 \\$$\\ $$  | $$$$$$\\  $$ /  \\__| $$$$$$\\   $$$$$$$ | $$$$$$\\  
  \\$$$$  /  \\____$$\\ $$ |      $$  __$$\\ $$  __$$ |$$  __$$\\ 
