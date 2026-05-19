@@ -95,6 +95,13 @@ export class IPCServer {
         } else if (args.type === 'deepseek') {
           envContent = envContent.replace(/DEEPSEEK_API_KEY=.*/, `DEEPSEEK_API_KEY=${args.token}`);
           config.DEEPSEEK_API_KEY = args.token;
+        } else if (args.type === 'model') {
+          if (!envContent.includes('DEEPSEEK_MODEL=')) {
+            envContent += `\nDEEPSEEK_MODEL=${args.token}`;
+          } else {
+            envContent = envContent.replace(/DEEPSEEK_MODEL=.*/, `DEEPSEEK_MODEL=${args.token}`);
+          }
+          config.DEEPSEEK_MODEL = args.token;
         }
         await fs.promises.writeFile(envPath, envContent);
         return { status: 'OK', message: `${args.type} token updated successfully.` };

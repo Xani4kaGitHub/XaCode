@@ -4,9 +4,19 @@ import path from 'path';
 // Load .env
 dotenv.config();
 
-export const config = {
+export interface Config {
+  TELEGRAM_BOT_TOKEN: string;
+  DEEPSEEK_API_KEY: string;
+  DEEPSEEK_MODEL: string;
+  ALLOWED_USER_IDS: number[];
+  SANDBOX_DIR: string;
+  MAX_EXECUTION_TIMEOUT_MS: number;
+}
+
+export const config: Config = {
   TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN || '',
   DEEPSEEK_API_KEY: process.env.DEEPSEEK_API_KEY || '',
+  DEEPSEEK_MODEL: process.env.DEEPSEEK_MODEL || 'deepseek-v4-pro',
   ALLOWED_USER_IDS: (process.env.ALLOWED_USER_IDS || '').split(',').map(id => parseInt(id.trim(), 10)).filter(id => !isNaN(id)),
   SANDBOX_DIR: process.env.SANDBOX_DIR || path.resolve(process.cwd(), 'sandbox'),
   MAX_EXECUTION_TIMEOUT_MS: parseInt(process.env.MAX_EXECUTION_TIMEOUT_MS || '30000', 10),

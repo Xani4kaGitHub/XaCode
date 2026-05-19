@@ -162,8 +162,8 @@ async function main() {
     case 'auth':
       const type = args[1];
       const token = args[2];
-      if (!type || !token || !['telegram', 'deepseek'].includes(type)) {
-        console.error(`${colors.red}Usage: xacode auth <telegram|deepseek> <new_token>${colors.reset}`);
+      if (!type || !token || !['telegram', 'deepseek', 'model'].includes(type)) {
+        console.error(`${colors.red}Usage: xacode auth <telegram|deepseek|model> <new_value>${colors.reset}`);
         process.exit(1);
       }
       console.log(`${colors.yellow}Updating ${type} token...${colors.reset}`);
@@ -217,7 +217,7 @@ async function main() {
       console.log('  doctor                      - Run diagnostics');
       console.log('  update                      - Pull latest code from GitHub and restart service');
       console.log('  uninstall                   - Completely remove XaCode service and files');
-      console.log('  auth <telegram|deepseek> <t>- Update API tokens instantly');
+      console.log('  auth <telegram|deepseek|model> <val> - Update API tokens or active model');
       console.log('  ban <telegram_id>           - Ban a user ID from accessing the bot');
       console.log('  logs                        - Stream live agent logs');
       console.log('  task "prompt"               - Run a task locally (Ctrl+C to abort)');

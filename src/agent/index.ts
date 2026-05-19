@@ -55,7 +55,7 @@ When the task is complete, return a clear summary and explicitly state that the 
       const messages: any[] = memoryManager.getHistory();
 
       const response = await openai.chat.completions.create({
-        model: 'deepseek-chat', // or deepseek-coder
+        model: config.DEEPSEEK_MODEL,
         messages: messages,
         tools: toolDefinitions as any,
         tool_choice: 'auto',
