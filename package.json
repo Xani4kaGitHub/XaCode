@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "Production-ready AI coding agent on DeepSeek API",
   "main": "dist/index.js",
+  "bin": {
+    "xacode": "./dist/cli.js"
+  },
   "scripts": {
     "start": "node dist/index.js",
     "build": "tsc",

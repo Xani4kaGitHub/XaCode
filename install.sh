@@ -49,6 +49,10 @@ fi
 # Create sandbox dir
 mkdir -p sandbox
 
+echo "Setting up global CLI command (xacode)..."
+chmod +x dist/cli.js
+sudo ln -sf $(pwd)/dist/cli.js /usr/local/bin/xacode
+
 echo "Setting up systemd service..."
 SERVICE_FILE=/etc/systemd/system/xacode.service
 
