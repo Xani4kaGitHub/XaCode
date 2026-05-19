@@ -102,7 +102,7 @@ export class IPCServer {
       case 'ban':
         const banEnvPath = path.join(process.cwd(), '.env');
         let banEnv = await fs.promises.readFile(banEnvPath, 'utf8');
-        const ids = config.ALLOWED_USER_IDS.split(',').map(id => id.trim()).filter(id => id !== args.id);
+        const ids = String(config.ALLOWED_USER_IDS).split(',').map((id: string) => id.trim()).filter((id: string) => id !== args.id);
         const newIds = ids.join(',');
         banEnv = banEnv.replace(/ALLOWED_USER_IDS=.*/, `ALLOWED_USER_IDS=${newIds}`);
         config.ALLOWED_USER_IDS = newIds;
@@ -111,7 +111,7 @@ export class IPCServer {
 
       case 'task':
         // Start task asynchronously, don't await here otherwise IPC blocks
-        agentCore.startTask(args.prompt).catch(e => logger.error(`CLI Task error: ${e.message}`));
+        agentCore.handleTask(args.prompt, (msg: string) => logger.info(`[Task] ${msg}`)).catch(e => logger.error(`CLI Task error: ${e.message}`));
         return { status: 'OK', message: 'Task submitted.' };
 
       case 'stop_task':
