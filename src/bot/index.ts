@@ -80,6 +80,27 @@ export class BotService {
   private async handleCommand(chatId: number, text: string) {
     const cmd = text.split(' ')[0].toLowerCase();
     switch (cmd) {
+      case '/start':
+      case '/help':
+        const helpMsg = `🤖 **XaCode Enterprise Bot**\n\n`
+          + `Here are the available commands:\n\n`
+          + `📊 **Status & Analytics**\n`
+          + `/status - View current task status\n`
+          + `/plan - View current execution plan\n`
+          + `/cost - View persistent API costs\n`
+          + `/files - List files modified by current task\n\n`
+          + `⚙️ **Configuration**\n`
+          + `/model - Switch DeepSeek API model\n`
+          + `/fullaccess <enable|disable> - Manage Full Access mode\n\n`
+          + `🛠 **System**\n`
+          + `/sandbox clear - Wipe the sandbox directory\n`
+          + `/workspace - Show current workspace info\n`
+          + `/terminal - Info about background terminals\n\n`
+          + `🛑 **Control**\n`
+          + `/stop - Abort current task immediately\n`
+          + `/reset - Clear bot memory and context`;
+        await this.bot.sendMessage(chatId, helpMsg, { parse_mode: 'Markdown' });
+        break;
       case '/plan':
         const context = memoryManager.getTaskContext();
         await this.bot.sendMessage(chatId, `Current Task: ${context.originalRequest || 'None'}\nStep: ${context.currentStep}`);
