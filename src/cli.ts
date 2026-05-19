@@ -116,6 +116,55 @@ $$ /  $$ |\\$$$$$$$ |\\$$$$$$  |\\$$$$$$  |\\$$$$$$$ |\\$$$$$$$\\
       console.log(JSON.stringify(doc, null, 2));
       break;
 
+    case 'auth':
+      const type = args[1];
+      const token = args[2];
+      if (!type || !token || !['telegram', 'deepseek'].includes(type)) {
+        console.error(`${colors.red}Usage: xacode auth <telegram|deepseek> <new_token>${colors.reset}`);
+        process.exit(1);
+      }
+      console.log(`${colors.yellow}Updating ${type} token...${colors.reset}`);
+      const authRes: any = await sendIPCCommand('auth', { type, token });
+      console.log(`${colors.green}${authRes.message}${colors.reset}`);
+      console.log(`Please restart the service for token changes to fully apply: sudo systemctl restart xacode`);
+      break;
+
+    case 'ban':
+      const banId = args[1];
+      if (!banId) {
+        console.error(`${colors.red}Usage: xacode ban <telegram_id>${colors.reset}`);
+        process.exit(1);
+      }
+      console.log(`${colors.yellow}Banning user ${banId}...${colors.reset}`);
+      const banRes: any = await sendIPCCommand('ban', { id: banId });
+      console.log(`${colors.green}${banRes.message}${colors.reset}`);
+      break;
+
+    case 'logs':
+      console.log(`${colors.cyan}Streaming XaCode logs (Press Ctrl+C to exit)...${colors.reset}`);
+      spawn('sudo', ['journalctl', '-u', 'xacode', '-f'], { stdio: 'inherit' });
+      break;
+
+    case 'task':
+      const prompt = args.slice(1).join(' ');
+      if (!prompt) {
+        console.error(`${colors.red}Usage: xacode task "your prompt here"${colors.reset}`);
+        process.exit(1);
+      }
+      console.log(`${colors.yellow}Submitting task to XaCode agent...${colors.reset}`);
+      await sendIPCCommand('task', { prompt });
+      console.log(`${colors.green}Task submitted successfully! Streaming logs...${colors.reset}`);
+      
+      const logProc = spawn('sudo', ['journalctl', '-u', 'xacode', '-f'], { stdio: 'inherit' });
+      
+      process.on('SIGINT', async () => {
+        console.log(`\n${colors.red}Caught interrupt signal (Ctrl+C). Stopping agent...${colors.reset}`);
+        await sendIPCCommand('stop_task');
+        logProc.kill('SIGINT');
+        process.exit(0);
+      });
+      break;
+
     case 'help':
     default:
       console.log(`\n${colors.cyan}$$\\   $$\\            $$$$$$\\                  $$\\           
@@ -128,12 +177,15 @@ $$ /  $$ |\\$$$$$$$ |\\$$$$$$  |\\$$$$$$  |\\$$$$$$$ |\\$$$$$$$\\
 \\__|  \\__| \\_______| \\______/  \\______/  \\_______| \\_______|${colors.reset}\n`);
       console.log(`${colors.green}XaCode CLI Enterprise${colors.reset}`);
       console.log('Available commands:');
-      console.log('  info      - Show detailed agent metrics, memory, and status');
-      console.log('  doctor    - Run diagnostics');
-      console.log('  update    - Pull latest code from GitHub and restart service');
-      console.log('  uninstall - Completely remove XaCode service and files');
-      console.log('  status    - View current task status');
-      console.log('  stop      - Halt agent execution');
+      console.log('  info                        - Show detailed agent metrics, memory, and status');
+      console.log('  doctor                      - Run diagnostics');
+      console.log('  update                      - Pull latest code from GitHub and restart service');
+      console.log('  uninstall                   - Completely remove XaCode service and files');
+      console.log('  auth <telegram|deepseek> <t>- Update API tokens instantly');
+      console.log('  ban <telegram_id>           - Ban a user ID from accessing the bot');
+      console.log('  logs                        - Stream live agent logs');
+      console.log('  task "prompt"               - Run a task locally (Ctrl+C to abort)');
+      console.log('  stop_task                   - Halt agent execution');
       break;
   }
 }

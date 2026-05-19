@@ -4,9 +4,11 @@ import path from 'path';
 import crypto from 'crypto';
 import { logger } from '../logger';
 import { metricsTracker } from '../metrics/MetricsTracker';
-import { agentStateMachine } from '../agent/StateMachine';
+import { agentStateMachine, AgentState } from '../agent/StateMachine';
 import { contextManager } from '../memory/ContextManager';
 import { permissionSystem } from '../security/PermissionSystem';
+import { config } from '../config';
+import { agentCore } from '../agent';
 
 export class IPCServer {
   private server: net.Server;
@@ -37,7 +39,7 @@ export class IPCServer {
   }
 
   private handleConnection(socket: net.Socket) {
-    socket.on('data', (data) => {
+    socket.on('data', async (data) => {
       try {
         const req = JSON.parse(data.toString());
         
@@ -47,7 +49,7 @@ export class IPCServer {
           return;
         }
 
-        const response = this.handleCommand(req.command, req.args);
+        const response = await this.handleCommand(req.command, req.args);
         socket.write(JSON.stringify(response));
       } catch (e: any) {
         socket.write(JSON.stringify({ error: e.message }));
@@ -57,7 +59,7 @@ export class IPCServer {
     });
   }
 
-  private handleCommand(command: string, args: any): any {
+  private async handleCommand(command: string, args: any): Promise<any> {
     switch (command) {
       case 'info':
         return {
@@ -84,7 +86,41 @@ export class IPCServer {
             filesystem: 'OK',
           }
         };
-      // ... other commands (status, stop, reset, etc.)
+      case 'auth':
+        const envPath = path.join(process.cwd(), '.env');
+        let envContent = await fs.promises.readFile(envPath, 'utf8');
+        if (args.type === 'telegram') {
+          envContent = envContent.replace(/TELEGRAM_BOT_TOKEN=.*/, `TELEGRAM_BOT_TOKEN=${args.token}`);
+          config.TELEGRAM_BOT_TOKEN = args.token;
+        } else if (args.type === 'deepseek') {
+          envContent = envContent.replace(/DEEPSEEK_API_KEY=.*/, `DEEPSEEK_API_KEY=${args.token}`);
+          config.DEEPSEEK_API_KEY = args.token;
+        }
+        await fs.promises.writeFile(envPath, envContent);
+        return { status: 'OK', message: `${args.type} token updated successfully.` };
+
+      case 'ban':
+        const banEnvPath = path.join(process.cwd(), '.env');
+        let banEnv = await fs.promises.readFile(banEnvPath, 'utf8');
+        const ids = config.ALLOWED_USER_IDS.split(',').map(id => id.trim()).filter(id => id !== args.id);
+        const newIds = ids.join(',');
+        banEnv = banEnv.replace(/ALLOWED_USER_IDS=.*/, `ALLOWED_USER_IDS=${newIds}`);
+        config.ALLOWED_USER_IDS = newIds;
+        await fs.promises.writeFile(banEnvPath, banEnv);
+        return { status: 'OK', message: `User ${args.id} banned. Remaining allowed: ${newIds}` };
+
+      case 'task':
+        // Start task asynchronously, don't await here otherwise IPC blocks
+        agentCore.startTask(args.prompt).catch(e => logger.error(`CLI Task error: ${e.message}`));
+        return { status: 'OK', message: 'Task submitted.' };
+
+      case 'stop_task':
+        if (agentStateMachine.getState() !== AgentState.IDLE) {
+          agentStateMachine.transition(AgentState.STOPPED);
+          return { status: 'OK', message: 'Agent execution halted.' };
+        }
+        return { status: 'OK', message: 'Agent was already idle.' };
+
       default:
         return { error: 'Unknown IPC command' };
     }
