@@ -11,6 +11,7 @@ export interface LLMRequest {
 export interface LLMResponse {
   content: string | null;
   toolCalls?: any[];
+  reasoningContent?: string;
   usage?: {
     promptTokens: number;
     completionTokens: number;
@@ -61,6 +62,7 @@ class DeepSeekProvider implements LLMProvider {
 
         return {
           content: msg.content,
+          reasoningContent: (msg as any).reasoning_content,
           toolCalls: msg.tool_calls,
           usage: usage ? {
             promptTokens: usage.prompt_tokens,

@@ -14,6 +14,7 @@ export interface ChatMessage {
   name?: string;
   tool_calls?: any[];
   tool_call_id?: string;
+  reasoning_content?: string;
 }
 
 export class MemoryManager {

@@ -43,6 +43,9 @@ CRITICAL RULES:
       logger.error('Agent loop crashed:', e);
       statusCallback(`[Error] Agent crashed: ${e.message}`);
       memoryManager.failTask();
+      if (agentStateMachine.getState() !== AgentState.STOPPED) {
+        agentStateMachine.transition(AgentState.FAILED);
+      }
     } finally {
       this.isExecuting = false;
       if (agentStateMachine.getState() !== AgentState.STOPPED) {
@@ -72,6 +75,7 @@ CRITICAL RULES:
         memoryManager.addMessage({
           role: 'assistant',
           content: response.content || '',
+          reasoning_content: response.reasoningContent,
           tool_calls: response.toolCalls,
         });
 
@@ -121,7 +125,11 @@ CRITICAL RULES:
           });
         }
       } else {
-        memoryManager.addMessage({ role: 'assistant', content: response.content || '' });
+        memoryManager.addMessage({ 
+          role: 'assistant', 
+          content: response.content || '',
+          reasoning_content: response.reasoningContent 
+        });
         statusCallback(`[Agent] ${response.content}`);
 
         // Decide if we should stop. A simple heuristic is if the agent says it's done or we don't have tools called.
