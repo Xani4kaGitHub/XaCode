@@ -204,13 +204,28 @@ export class BotService {
         break;
       }
       case '/status': {
-        const ctx = agentOrchestrator.getSession(chatId).memoryManager.getTaskContext();
-        const statusMsg = `📊 *Agent Current Status*\n`
+        const session = agentOrchestrator.getSession(chatId);
+        const ctx = session.memoryManager.getTaskContext();
+        const memStats = session.memoryManager.contextManager.getMemoryStats();
+        const agentState = session.stateMachine.getState();
+        
+        const statusMap: Record<string, string> = {
+          'idle': '🟡 Ожидание (Idle)',
+          'running': '🟢 В работе (Running)',
+          'completed': '✅ Завершено (Completed)',
+          'error': '🔴 Ошибка (Error)'
+        };
+        const st = statusMap[ctx.status] || ctx.status;
+        const taskText = ctx.originalRequest ? (ctx.originalRequest.length > 40 ? ctx.originalRequest.substring(0, 40) + '...' : ctx.originalRequest) : 'Нет активной задачи';
+
+        const statusMsg = `📊 *Статус Агента*\n`
           + `────────────────────────\n`
-          + `• *🚦 Status:* *${ctx.status}*\n`
-          + `• *📝 Task:* \`${ctx.originalRequest || 'None'}\`\n`
-          + `• *📍 Step:* \`${ctx.currentStep || 'Idle'}\`\n`
-          + `• *📁 Files Modified:* *${ctx.filesModified.length}*`;
+          + `• *Состояние:* ${st} \`[${agentState}]\`\n`
+          + `• *Задача:* \`${taskText}\`\n`
+          + `• *Этап:* _${ctx.currentStep || 'Ожидание задачи...'}_\n`
+          + `• *Использование памяти:* \`${memStats.usageTokens} / ${memStats.maxTokens}\` токенов\n`
+          + `• *Изменено файлов:* *${ctx.filesModified.length}*`;
+
         await this.bot.sendMessage(chatId, statusMsg, { parse_mode: 'Markdown' });
         break;
       }
