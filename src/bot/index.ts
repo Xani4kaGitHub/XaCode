@@ -511,9 +511,25 @@ export class BotService {
       
       const audioPath = await this.bot.downloadFile(fileId, tmpDir);
       
-      const { exec } = require('child_process');
+      const { exec, execSync } = require('child_process');
       const scriptPath = path.join(process.cwd(), 'scripts', 'transcribe.py');
-      const pythonCmd = `python "${scriptPath}" "${audioPath}" "${config.WHISPER_MODEL}"`;
+      
+      // Auto-detect available Python binary
+      let pythonBin = 'python3';
+      try {
+        execSync('python3 --version', { stdio: 'ignore' });
+      } catch {
+        try {
+          execSync('python --version', { stdio: 'ignore' });
+          pythonBin = 'python';
+        } catch {
+          await this.bot.deleteMessage(chatId, processMsg.message_id).catch(() => {});
+          await this.bot.sendMessage(chatId, `❌ *Transcription Error:*\n\`Python is not installed. Install python3 to use voice transcription.\``, { parse_mode: 'Markdown' });
+          return;
+        }
+      }
+      
+      const pythonCmd = `${pythonBin} "${scriptPath}" "${audioPath}" "${config.WHISPER_MODEL}"`;
       
       logger.info(`Running Whisper transcription: ${pythonCmd}`);
       
