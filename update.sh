@@ -15,19 +15,27 @@ npm run build
 
 echo "Checking Python & faster-whisper dependencies..."
 if command -v python3 &> /dev/null; then
-    if ! python3 -c "import faster_whisper" &> /dev/null; then
-        echo "faster-whisper not found. Installing..."
-        if ! command -v pip3 &> /dev/null && ! command -v pip &> /dev/null; then
-            echo "pip not found. Installing python3-pip..."
-            sudo apt-get update && sudo apt-get install -y python3-pip
-        fi
-        pip3 install --break-system-packages faster-whisper || pip3 install faster-whisper || python3 -m pip install faster-whisper || echo "WARNING: Failed to install faster-whisper automatically."
+    VENV_DIR="$(pwd)/.venv"
+    VENV_PIP="$VENV_DIR/bin/pip"
+    VENV_PYTHON="$VENV_DIR/bin/python"
+
+    # Create venv if it doesn't exist
+    if [ ! -d "$VENV_DIR" ]; then
+        echo "Creating Python virtual environment..."
+        python3 -m venv "$VENV_DIR"
+    fi
+
+    if ! "$VENV_PYTHON" -c "import faster_whisper" &> /dev/null; then
+        echo "faster-whisper not found. Installing into venv..."
+        "$VENV_PIP" install --upgrade pip
+        "$VENV_PIP" install faster-whisper || echo "WARNING: Failed to install faster-whisper."
     else
-        echo "faster-whisper is already installed."
+        echo "faster-whisper is already installed in venv."
     fi
 else
     echo "WARNING: python3 is not installed. Whisper transcription will not work."
 fi
+
 
 echo "Restarting XaCode service..."
 sudo systemctl restart xacode

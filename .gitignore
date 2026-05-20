@@ -5,3 +5,4 @@ sandbox/
 .env
 .xacode_ipc_token
 .xacode_snapshots/
+.venv/

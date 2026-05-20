@@ -514,22 +514,29 @@ export class BotService {
       const { exec, execSync } = require('child_process');
       const scriptPath = path.join(process.cwd(), 'scripts', 'transcribe.py');
       
-      // Auto-detect available Python binary
-      let pythonBin = 'python3';
-      try {
-        execSync('python3 --version', { stdio: 'ignore' });
-      } catch {
+      // Auto-detect available Python binary: prefer project venv, then system python3/python
+      const venvPython = path.join(process.cwd(), '.venv', 'bin', 'python');
+      let pythonBin = '';
+      
+      if (fs.existsSync(venvPython)) {
+        pythonBin = venvPython;
+      } else {
         try {
-          execSync('python --version', { stdio: 'ignore' });
-          pythonBin = 'python';
+          execSync('python3 --version', { stdio: 'ignore' });
+          pythonBin = 'python3';
         } catch {
-          await this.bot.deleteMessage(chatId, processMsg.message_id).catch(() => {});
-          await this.bot.sendMessage(chatId, `❌ *Transcription Error:*\n\`Python is not installed. Install python3 to use voice transcription.\``, { parse_mode: 'Markdown' });
-          return;
+          try {
+            execSync('python --version', { stdio: 'ignore' });
+            pythonBin = 'python';
+          } catch {
+            await this.bot.deleteMessage(chatId, processMsg.message_id).catch(() => {});
+            await this.bot.sendMessage(chatId, `❌ *Transcription Error:*\n\`Python is not installed. Run update.sh to set up the venv.\``, { parse_mode: 'Markdown' });
+            return;
+          }
         }
       }
       
-      const pythonCmd = `${pythonBin} "${scriptPath}" "${audioPath}" "${config.WHISPER_MODEL}"`;
+      const pythonCmd = `"${pythonBin}" "${scriptPath}" "${audioPath}" "${config.WHISPER_MODEL}"`;
       
       logger.info(`Running Whisper transcription: ${pythonCmd}`);
       
