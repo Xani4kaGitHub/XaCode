@@ -16,12 +16,12 @@ export enum AgentState {
 
 const validTransitions: Record<AgentState, AgentState[]> = {
   [AgentState.IDLE]: [AgentState.ANALYZING_TASK, AgentState.STOPPED],
-  [AgentState.ANALYZING_TASK]: [AgentState.RESEARCHING_PROJECT, AgentState.PLANNING, AgentState.FAILED, AgentState.STOPPED],
-  [AgentState.RESEARCHING_PROJECT]: [AgentState.PLANNING, AgentState.FAILED, AgentState.STOPPED],
-  [AgentState.PLANNING]: [AgentState.EXECUTING, AgentState.FAILED, AgentState.STOPPED],
-  [AgentState.EXECUTING]: [AgentState.VERIFYING, AgentState.FAILED, AgentState.STOPPED],
-  [AgentState.VERIFYING]: [AgentState.REPORTING, AgentState.EXECUTING, AgentState.FAILED, AgentState.STOPPED], // Loop back to EXECUTING if verification fails and we retry
-  [AgentState.REPORTING]: [AgentState.COMPLETED, AgentState.FAILED, AgentState.STOPPED],
+  [AgentState.ANALYZING_TASK]: [AgentState.RESEARCHING_PROJECT, AgentState.PLANNING, AgentState.COMPLETED, AgentState.FAILED, AgentState.STOPPED, AgentState.IDLE],
+  [AgentState.RESEARCHING_PROJECT]: [AgentState.PLANNING, AgentState.COMPLETED, AgentState.FAILED, AgentState.STOPPED, AgentState.IDLE],
+  [AgentState.PLANNING]: [AgentState.EXECUTING, AgentState.COMPLETED, AgentState.FAILED, AgentState.STOPPED, AgentState.IDLE],
+  [AgentState.EXECUTING]: [AgentState.VERIFYING, AgentState.COMPLETED, AgentState.FAILED, AgentState.STOPPED, AgentState.IDLE],
+  [AgentState.VERIFYING]: [AgentState.REPORTING, AgentState.EXECUTING, AgentState.COMPLETED, AgentState.FAILED, AgentState.STOPPED, AgentState.IDLE], // Loop back to EXECUTING if verification fails and we retry
+  [AgentState.REPORTING]: [AgentState.COMPLETED, AgentState.FAILED, AgentState.STOPPED, AgentState.IDLE],
   [AgentState.COMPLETED]: [AgentState.IDLE],
   [AgentState.FAILED]: [AgentState.IDLE],
   [AgentState.STOPPED]: [AgentState.IDLE],

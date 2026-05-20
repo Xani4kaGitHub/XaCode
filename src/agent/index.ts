@@ -8,9 +8,9 @@ import { agentStateMachine, AgentState } from './StateMachine';
 export class AgentCore {
   private isExecuting: boolean = false;
 
-  async handleTask(task: string, statusCallback: (msg: string) => void) {
+  async handleTask(task: string, statusCallback: (msg: string) => Promise<void> | void) {
     if (this.isExecuting) {
-      statusCallback('Agent is already executing a task. Use /stop to cancel.');
+      await statusCallback('Agent is already executing a task. Use /stop to cancel.');
       return;
     }
 
@@ -18,7 +18,7 @@ export class AgentCore {
     agentStateMachine.reset();
     agentStateMachine.transition(AgentState.ANALYZING_TASK);
     memoryManager.setTask(task);
-    statusCallback(`[Started] Task: ${task}\nAnalyzing...`);
+    await statusCallback(`[Started] Task: ${task}\nAnalyzing...`);
 
     const systemPrompt = `You are XaCode, a production-ready AI coding agent.
 You have access to a secure sandbox and can execute tools.
@@ -41,7 +41,7 @@ CRITICAL RULES:
       await this.runLoop(statusCallback);
     } catch (e: any) {
       logger.error('Agent loop crashed:', e);
-      statusCallback(`[Error] Agent crashed: ${e.message}`);
+      await statusCallback(`[Error] Agent crashed: ${e.message}`);
       memoryManager.failTask();
       if (agentStateMachine.getState() !== AgentState.STOPPED) {
         agentStateMachine.transition(AgentState.FAILED);
@@ -54,7 +54,7 @@ CRITICAL RULES:
     }
   }
 
-  private async runLoop(statusCallback: (msg: string) => void) {
+  private async runLoop(statusCallback: (msg: string) => Promise<void> | void) {
     let loopCount = 0;
     const MAX_LOOPS = 15;
     let recentActions: string[] = [];
@@ -85,7 +85,7 @@ CRITICAL RULES:
           try {
             args = JSON.parse(toolCall.function.arguments);
           } catch (e: any) {
-            statusCallback(`[Tool Error] JSON syntax error in arguments for ${functionName}.`);
+            await statusCallback(`[Tool Error] JSON syntax error in arguments for ${functionName}.`);
             logger.error(`JSON parse error for tool ${functionName}`, e);
             memoryManager.addMessage({
               role: 'tool',
@@ -112,7 +112,7 @@ CRITICAL RULES:
             continue;
           }
           
-          statusCallback(`[Tool Call] ${functionName}\n${JSON.stringify(args)}`);
+          await statusCallback(`[Tool Call] ${functionName}\n${JSON.stringify(args)}`);
           logger.info(`Executing tool ${functionName}`, args);
 
           const toolResult = await executeTool(functionName, args);
@@ -130,12 +130,12 @@ CRITICAL RULES:
           content: response.content || '',
           reasoning_content: response.reasoningContent 
         });
-        statusCallback(`[Agent] ${response.content}`);
+        await statusCallback(`[Agent] ${response.content}`);
 
         // Decide if we should stop. A simple heuristic is if the agent says it's done or we don't have tools called.
         if (response.content?.toLowerCase().includes('task complete') || response.content?.toLowerCase().includes('task is complete')) {
           memoryManager.completeTask();
-          statusCallback(`[Completed] Task finished.`);
+          await statusCallback(`[Completed] Task finished.`);
           break;
         }
 
@@ -145,7 +145,7 @@ CRITICAL RULES:
     }
 
     if (loopCount >= MAX_LOOPS) {
-      statusCallback('[Warning] Maximum execution loops reached. Halting to prevent infinite loop.');
+      await statusCallback('[Warning] Maximum execution loops reached. Halting to prevent infinite loop.');
     }
   }
 
