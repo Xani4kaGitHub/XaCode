@@ -43,22 +43,50 @@ export class TerminalManager {
 
       let stdout = '';
       let stderr = '';
+      let stdoutLineBuffer = '';
+      let stderrLineBuffer = '';
 
       child.stdout.on('data', (data) => {
-        stdout += data.toString();
-        // Truncate on the fly to prevent massive memory usage
+        const str = data.toString();
+        stdout += str;
         if (stdout.length > 10000) stdout = stdout.slice(-8000);
+
+        stdoutLineBuffer += str;
+        const lines = stdoutLineBuffer.split('\n');
+        stdoutLineBuffer = lines.pop() || '';
+        for (const line of lines) {
+          if (line.trim()) {
+            logger.info(`[Terminal Live Out] ${line.trim()}`);
+          }
+        }
       });
 
       child.stderr.on('data', (data) => {
-        stderr += data.toString();
+        const str = data.toString();
+        stderr += str;
         if (stderr.length > 10000) stderr = stderr.slice(-8000);
+
+        stderrLineBuffer += str;
+        const lines = stderrLineBuffer.split('\n');
+        stderrLineBuffer = lines.pop() || '';
+        for (const line of lines) {
+          if (line.trim()) {
+            logger.warn(`[Terminal Live Err] ${line.trim()}`);
+          }
+        }
       });
 
       let hasFinished = false;
       const finish = (exitCode: number, outStr: string, errStr: string, isTimeout = false) => {
         if (hasFinished) return;
         hasFinished = true;
+
+        if (stdoutLineBuffer.trim()) {
+          logger.info(`[Terminal Live Out] ${stdoutLineBuffer.trim()}`);
+        }
+        if (stderrLineBuffer.trim()) {
+          logger.warn(`[Terminal Live Err] ${stderrLineBuffer.trim()}`);
+        }
         
         const finalStdout = outStr.slice(-8000);
         const finalStderr = errStr.slice(-8000);
@@ -67,13 +95,6 @@ export class TerminalManager {
           logger.warn(`[Terminal] Command timed out after ${config.MAX_EXECUTION_TIMEOUT_MS}ms: "${command}"`);
         } else {
           logger.info(`[Terminal] Command "${command}" exited with code ${exitCode}`);
-        }
-        
-        if (finalStdout.trim()) {
-          logger.info(`[Terminal Stdout] for "${command}":\n${finalStdout.trim()}`);
-        }
-        if (finalStderr.trim()) {
-          logger.info(`[Terminal Stderr] for "${command}":\n${finalStderr.trim()}`);
         }
         
         resolve({ stdout: finalStdout, stderr: finalStderr, code: exitCode });
