@@ -22,7 +22,11 @@ if command -v python3 &> /dev/null; then
     # Create venv if it doesn't exist
     if [ ! -d "$VENV_DIR" ]; then
         echo "Creating Python virtual environment..."
-        python3 -m venv "$VENV_DIR"
+        if ! python3 -m venv "$VENV_DIR" 2>/dev/null; then
+            echo "python3-venv not installed. Installing..."
+            apt-get update && apt-get install -y python3-venv python3-full
+            python3 -m venv "$VENV_DIR"
+        fi
     fi
 
     if ! "$VENV_PYTHON" -c "import faster_whisper" &> /dev/null; then
