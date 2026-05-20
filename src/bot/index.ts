@@ -130,6 +130,7 @@ export class BotService {
           + `• \`/files\` — List files modified by current task\n\n`
           + `⚙️ *Configuration*\n`
           + `• \`/model\` — Switch DeepSeek API model\n`
+          + `• \`/config\` — View and modify system limits\n`
           + `• \`/fullaccess <enable|disable>\` — Manage Full Access mode\n\n`
           + `🛠 *System*\n`
           + `• \`/sandbox clear\` — Wipe the sandbox directory\n`
@@ -294,6 +295,74 @@ export class BotService {
           + `• *Active Processes:* *${terminalManager.getActiveProcessesCount()}*\n\n`
           + `_Background processes are monitored and closed automatically. Check logs for details._`;
         await this.bot.sendMessage(chatId, termMsg, { parse_mode: 'Markdown' });
+        break;
+      case '/config':
+        const cfgSubcmd = text.split(' ')[1];
+        const cfgValStr = text.split(' ')[2];
+        if (cfgSubcmd && cfgValStr) {
+          const envPath = require('path').join(process.cwd(), '.env');
+          const fs = require('fs');
+          let envContent = fs.readFileSync(envPath, 'utf8');
+          
+          if (cfgSubcmd === 'loops') {
+            const num = parseInt(cfgValStr, 10);
+            if (!isNaN(num) && num > 0) {
+              if (!envContent.includes('MAX_LOOPS=')) {
+                envContent += `\nMAX_LOOPS=${num}`;
+              } else {
+                envContent = envContent.replace(/MAX_LOOPS=.*/, `MAX_LOOPS=${num}`);
+              }
+              config.MAX_LOOPS = num;
+              fs.writeFileSync(envPath, envContent);
+              await this.bot.sendMessage(chatId, `✅ *Configuration Updated*\n────────────────────────\n• *MAX_LOOPS* is now set to \`${num}\``, { parse_mode: 'Markdown' });
+            } else {
+              await this.bot.sendMessage(chatId, `❌ *Invalid Value:* Please specify a positive integer for loops.`, { parse_mode: 'Markdown' });
+            }
+          } else if (cfgSubcmd === 'timeout') {
+            const num = parseInt(cfgValStr, 10);
+            if (!isNaN(num) && num > 0) {
+              if (!envContent.includes('MAX_EXECUTION_TIMEOUT_MS=')) {
+                envContent += `\nMAX_EXECUTION_TIMEOUT_MS=${num}`;
+              } else {
+                envContent = envContent.replace(/MAX_EXECUTION_TIMEOUT_MS=.*/, `MAX_EXECUTION_TIMEOUT_MS=${num}`);
+              }
+              config.MAX_EXECUTION_TIMEOUT_MS = num;
+              fs.writeFileSync(envPath, envContent);
+              await this.bot.sendMessage(chatId, `✅ *Configuration Updated*\n────────────────────────\n• *MAX_EXECUTION_TIMEOUT_MS* is now set to \`${num}\` ms`, { parse_mode: 'Markdown' });
+            } else {
+              await this.bot.sendMessage(chatId, `❌ *Invalid Value:* Please specify a positive integer for timeout.`, { parse_mode: 'Markdown' });
+            }
+          } else if (cfgSubcmd === 'reasoning') {
+            const isTrue = cfgValStr.toLowerCase() === 'true' || cfgValStr === '1';
+            const isFalse = cfgValStr.toLowerCase() === 'false' || cfgValStr === '0';
+            if (isTrue || isFalse) {
+              const val = isTrue ? 'true' : 'false';
+              if (!envContent.includes('SHOW_REASONING=')) {
+                envContent += `\nSHOW_REASONING=${val}`;
+              } else {
+                envContent = envContent.replace(/SHOW_REASONING=.*/, `SHOW_REASONING=${val}`);
+              }
+              config.SHOW_REASONING = isTrue;
+              fs.writeFileSync(envPath, envContent);
+              await this.bot.sendMessage(chatId, `✅ *Configuration Updated*\n────────────────────────\n• *SHOW_REASONING* is now set to \`${val}\``, { parse_mode: 'Markdown' });
+            } else {
+              await this.bot.sendMessage(chatId, `❌ *Invalid Value:* Please specify \`true\` or \`false\`.`, { parse_mode: 'Markdown' });
+            }
+          } else {
+            await this.bot.sendMessage(chatId, `❌ *Unknown Parameter:* Use \`loops\`, \`timeout\`, or \`reasoning\`.`, { parse_mode: 'Markdown' });
+          }
+        } else {
+          const cfgMsg = `⚙️ *XaCode Configuration Options*\n`
+            + `────────────────────────\n`
+            + `• *MAX_LOOPS:* \`${config.MAX_LOOPS}\` steps\n`
+            + `• *MAX_EXECUTION_TIMEOUT_MS:* \`${config.MAX_EXECUTION_TIMEOUT_MS}\` ms\n`
+            + `• *SHOW_REASONING:* \`${config.SHOW_REASONING}\` (Output deep thought stream)\n\n`
+            + `*To update config, type:*\n`
+            + `• \`/config loops <value>\` (e.g. \`/config loops 40\`)\n`
+            + `• \`/config timeout <value>\` (e.g. \`/config timeout 60000\`)\n`
+            + `• \`/config reasoning <true|false>\``;
+          await this.bot.sendMessage(chatId, cfgMsg, { parse_mode: 'Markdown' });
+        }
         break;
       default:
         await this.bot.sendMessage(chatId, '❓ *Unknown command.*\nType `/help` to see all available commands.', { parse_mode: 'Markdown' });

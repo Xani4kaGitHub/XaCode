@@ -11,6 +11,8 @@ export interface Config {
   ALLOWED_USER_IDS: number[];
   SANDBOX_DIR: string;
   MAX_EXECUTION_TIMEOUT_MS: number;
+  MAX_LOOPS: number;
+  SHOW_REASONING: boolean;
 }
 
 export const config: Config = {
@@ -20,6 +22,8 @@ export const config: Config = {
   ALLOWED_USER_IDS: (process.env.ALLOWED_USER_IDS || '').split(',').map(id => parseInt(id.trim(), 10)).filter(id => !isNaN(id)),
   SANDBOX_DIR: process.env.SANDBOX_DIR || path.resolve(process.cwd(), 'sandbox'),
   MAX_EXECUTION_TIMEOUT_MS: parseInt(process.env.MAX_EXECUTION_TIMEOUT_MS || '30000', 10),
+  MAX_LOOPS: parseInt(process.env.MAX_LOOPS || '30', 10),
+  SHOW_REASONING: process.env.SHOW_REASONING === 'true',
 };
 
 export function validateConfig() {

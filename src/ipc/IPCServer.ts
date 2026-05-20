@@ -68,6 +68,7 @@ export class IPCServer {
           state: agentStateMachine.getState(),
           memory: contextManager.getMemoryStats(),
           fullAccess: permissionSystem.isFullAccess(),
+          showReasoning: config.SHOW_REASONING,
           system: {
             pid: process.pid,
             nodeVersion: process.version,
@@ -145,6 +146,49 @@ export class IPCServer {
           return { status: 'OK', message: 'Agent execution halted.' };
         }
         return { status: 'OK', message: 'Agent was already idle.' };
+
+      case 'config':
+        const cfgEnvPath = path.join(process.cwd(), '.env');
+        let cfgEnvContent = await fs.promises.readFile(cfgEnvPath, 'utf8');
+        const key = args.key;
+        const val = args.value;
+        if (key === 'loops') {
+          const num = parseInt(val, 10);
+          if (isNaN(num) || num <= 0) return { error: 'Invalid loops value' };
+          if (!cfgEnvContent.includes('MAX_LOOPS=')) {
+            cfgEnvContent += `\nMAX_LOOPS=${num}`;
+          } else {
+            cfgEnvContent = cfgEnvContent.replace(/MAX_LOOPS=.*/, `MAX_LOOPS=${num}`);
+          }
+          config.MAX_LOOPS = num;
+          await fs.promises.writeFile(cfgEnvPath, cfgEnvContent);
+          return { status: 'OK', message: `MAX_LOOPS set to ${num}.` };
+        } else if (key === 'timeout') {
+          const num = parseInt(val, 10);
+          if (isNaN(num) || num <= 0) return { error: 'Invalid timeout value' };
+          if (!cfgEnvContent.includes('MAX_EXECUTION_TIMEOUT_MS=')) {
+            cfgEnvContent += `\nMAX_EXECUTION_TIMEOUT_MS=${num}`;
+          } else {
+            cfgEnvContent = cfgEnvContent.replace(/MAX_EXECUTION_TIMEOUT_MS=.*/, `MAX_EXECUTION_TIMEOUT_MS=${num}`);
+          }
+          config.MAX_EXECUTION_TIMEOUT_MS = num;
+          await fs.promises.writeFile(cfgEnvPath, cfgEnvContent);
+          return { status: 'OK', message: `MAX_EXECUTION_TIMEOUT_MS set to ${num} ms.` };
+        } else if (key === 'reasoning') {
+          const isTrue = val.toLowerCase() === 'true' || val === '1';
+          const isFalse = val.toLowerCase() === 'false' || val === '0';
+          if (!isTrue && !isFalse) return { error: 'Invalid reasoning value. Must be true or false' };
+          const writeVal = isTrue ? 'true' : 'false';
+          if (!cfgEnvContent.includes('SHOW_REASONING=')) {
+            cfgEnvContent += `\nSHOW_REASONING=${writeVal}`;
+          } else {
+            cfgEnvContent = cfgEnvContent.replace(/SHOW_REASONING=.*/, `SHOW_REASONING=${writeVal}`);
+          }
+          config.SHOW_REASONING = isTrue;
+          await fs.promises.writeFile(cfgEnvPath, cfgEnvContent);
+          return { status: 'OK', message: `SHOW_REASONING set to ${writeVal}.` };
+        }
+        return { error: 'Invalid config key' };
 
       default:
         return { error: 'Unknown IPC command' };

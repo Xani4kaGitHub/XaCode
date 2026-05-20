@@ -108,6 +108,7 @@ async function main() {
         console.log(`${colors.green}│ [ AGENT CORE ]${colors.reset}`);
         console.log(`│ Current State    : ${info.state === 'IDLE' ? colors.green : colors.yellow}${info.state}${colors.reset}`);
         console.log(`│ Full Access Mode : ${info.fullAccess ? colors.red + 'ENABLED [UNSAFE]' : colors.green + 'DISABLED [SAFE]'}${colors.reset}`);
+        console.log(`│ Show Reasoning   : ${info.showReasoning ? colors.green + 'ON' : colors.yellow + 'OFF'}${colors.reset}`);
         console.log(`│ Agent Uptime     : ${Math.round(info.metrics.uptimeMs / 1000)} seconds`);
         console.log(`${colors.green}│${colors.reset}`);
         console.log(`${colors.green}│ [ MEMORY & CONTEXT ]${colors.reset}`);
@@ -239,6 +240,23 @@ async function main() {
       process.exit(0);
       break;
 
+    case 'config':
+      const cfgKey = args[1];
+      const cfgVal = args[2];
+      if (!cfgKey || !cfgVal || !['loops', 'timeout', 'reasoning'].includes(cfgKey)) {
+        console.error(`${colors.red}Usage: xacode config <loops|timeout|reasoning> <new_value>${colors.reset}`);
+        process.exit(1);
+      }
+      console.log(`${colors.yellow}Updating config ${cfgKey} to ${cfgVal}...${colors.reset}`);
+      const cfgRes: any = await sendIPCCommand('config', { key: cfgKey, value: cfgVal });
+      if (cfgRes.error) {
+        console.error(`${colors.red}Error: ${cfgRes.error}${colors.reset}`);
+        process.exit(1);
+      }
+      console.log(`${colors.green}${cfgRes.message}${colors.reset}`);
+      console.log(`Please restart the service for configuration changes to fully apply: sudo systemctl restart xacode`);
+      break;
+
     case 'logs':
       console.log(`${colors.cyan}Streaming XaCode logs (Press Ctrl+C to exit)...${colors.reset}`);
       spawn('sudo', ['journalctl', '-u', 'xacode', '-f'], { stdio: 'inherit' });
@@ -278,6 +296,7 @@ async function main() {
       console.log('  uninstall                   - Completely remove XaCode service and files');
       console.log('  sandbox clear               - Wipes the sandbox directory clean');
       console.log('  auth <telegram|deepseek|model> <val> - Update API tokens or active model');
+      console.log('  config <loops|timeout|reasoning> <val> - Update system configuration parameters');
       console.log('  ban <telegram_id>           - Ban a user ID from accessing the bot');
       console.log('  logs                        - Stream live agent logs');
       console.log('  task "prompt"               - Run a task locally (Ctrl+C to abort)');

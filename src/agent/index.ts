@@ -56,8 +56,9 @@ CRITICAL RULES:
 
   private async runLoop(statusCallback: (msg: string) => Promise<void> | void) {
     let loopCount = 0;
-    const MAX_LOOPS = 15;
+    const MAX_LOOPS = config.MAX_LOOPS;
     let recentActions: string[] = [];
+    let recentToolResults: string[] = [];
 
     while (loopCount < MAX_LOOPS && this.isExecuting && agentStateMachine.getState() !== AgentState.STOPPED) {
       loopCount++;
@@ -118,11 +119,24 @@ CRITICAL RULES:
 
           const toolResult = await executeTool(functionName, args);
           
+          let finalResult = toolResult;
+          if (toolResult && toolResult.trim().length > 0) {
+            recentToolResults.push(toolResult.trim());
+            if (recentToolResults.length > 5) recentToolResults.shift();
+            
+            const duplicateResultCount = recentToolResults.filter(r => r === toolResult.trim()).length;
+            if (duplicateResultCount >= 3) {
+              const warningMsg = `[SYSTEM WARNING] You have received this exact same output/error from your tools 3 times recently:\n${toolResult.substring(0, 300)}\n\nYou are repeating the same mistake or running into the same blocker. DO NOT keep trying the same command or similar failing actions. You must change your approach completely, investigate the cause of the failure, or ask the user for advice/help in your response.`;
+              finalResult = `${toolResult}\n\n${warningMsg}`;
+              await statusCallback(`⚠️ *Stuck Loop Warning:* Agent received the same error/result 3 times.`);
+            }
+          }
+
           memoryManager.addMessage({
             role: 'tool',
             tool_call_id: toolCall.id,
             name: functionName,
-            content: toolResult
+            content: finalResult
           });
         }
       } else {
@@ -131,6 +145,11 @@ CRITICAL RULES:
           content: response.content || '',
           reasoning_content: response.reasoningContent 
         });
+        
+        if (config.SHOW_REASONING && response.reasoningContent) {
+          await statusCallback(`🧠 *Agent Reasoning:*\n_${response.reasoningContent}_`);
+        }
+
         await statusCallback(`🤖 *Agent:* ${response.content}`);
 
         // Decide if we should stop. A simple heuristic is if the agent says it's done or we don't have tools called.
