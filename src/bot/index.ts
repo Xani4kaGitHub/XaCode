@@ -245,8 +245,25 @@ export class BotService {
    */
   private async sendChunkedMessage(chatId: number, text: string) {
     const MAX_LENGTH = 4000;
+    
+    // Helper to format/sanitize text for Telegram Markdown V1
+    const formatText = (val: string) => {
+      // Standard markdown bold is **, Telegram Markdown V1 uses *
+      return val.replace(/\*\*/g, '*');
+    };
+
+    const send = async (msgText: string) => {
+      const formatted = formatText(msgText);
+      try {
+        await this.bot.sendMessage(chatId, formatted, { parse_mode: 'Markdown' });
+      } catch (err: any) {
+        logger.warn(`Failed to send message as Markdown, falling back to plain text: ${err.message}`);
+        await this.bot.sendMessage(chatId, msgText);
+      }
+    };
+
     if (text.length <= MAX_LENGTH) {
-      await this.bot.sendMessage(chatId, text);
+      await send(text);
       return;
     }
 
@@ -254,7 +271,7 @@ export class BotService {
     while (remaining.length > 0) {
       const chunk = remaining.substring(0, MAX_LENGTH);
       remaining = remaining.substring(MAX_LENGTH);
-      await this.bot.sendMessage(chatId, chunk);
+      await send(chunk);
     }
   }
 }
