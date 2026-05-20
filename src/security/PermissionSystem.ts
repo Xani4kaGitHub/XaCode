@@ -11,21 +11,25 @@ export enum RiskLevel {
 export class PermissionSystem {
   private fullAccessEnabled: boolean = false;
   private fullAccessTimeout: NodeJS.Timeout | null = null;
+  private fullAccessExpiry: number = 0;
   private readonly FULL_ACCESS_DURATION_MS = 15 * 60 * 1000; // 15 minutes
 
-  enableFullAccess() {
+  enableFullAccess(durationMs?: number) {
     this.fullAccessEnabled = true;
-    logger.warn('!!! FULL ACCESS MODE ENABLED !!!');
+    const duration = durationMs ?? this.FULL_ACCESS_DURATION_MS;
+    this.fullAccessExpiry = Date.now() + duration;
+    logger.warn(`!!! FULL ACCESS MODE ENABLED !!!`);
     
     if (this.fullAccessTimeout) clearTimeout(this.fullAccessTimeout);
     
     this.fullAccessTimeout = setTimeout(() => {
       this.disableFullAccess();
-    }, this.FULL_ACCESS_DURATION_MS);
+    }, duration);
   }
 
   disableFullAccess() {
     this.fullAccessEnabled = false;
+    this.fullAccessExpiry = 0;
     logger.info('Full Access Mode disabled.');
     if (this.fullAccessTimeout) {
       clearTimeout(this.fullAccessTimeout);
@@ -35,6 +39,12 @@ export class PermissionSystem {
 
   isFullAccess(): boolean {
     return this.fullAccessEnabled;
+  }
+
+  getFullAccessRemainingMinutes(): number {
+    if (!this.fullAccessEnabled) return 0;
+    const remaining = this.fullAccessExpiry - Date.now();
+    return Math.max(0, Math.round(remaining / 1000 / 60));
   }
 
   assessCommandRisk(command: string): RiskLevel {

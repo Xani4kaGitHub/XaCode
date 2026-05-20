@@ -1,6 +1,8 @@
 import TelegramBot from 'node-telegram-bot-api';
 import { config } from '../config';
 import { securityManager } from '../security';
+import fs from 'fs';
+import path from 'path';
 import { agentCore } from '../agent';
 import { memoryManager } from '../memory';
 import { terminalManager } from '../terminal';
@@ -9,6 +11,7 @@ import { permissionSystem } from '../security/PermissionSystem';
 
 export class BotService {
   private bot: TelegramBot;
+  private pendingVoiceTasks = new Map<string, string>();
 
   constructor() {
     this.bot = new TelegramBot(config.TELEGRAM_BOT_TOKEN, { polling: true });
@@ -24,6 +27,11 @@ export class BotService {
 
       if (!userId || !securityManager.isUserAllowed(userId)) {
         logger.warn(`Unauthorized access attempt from user ID: ${userId}`);
+        return;
+      }
+
+      if (msg.voice) {
+        await this.handleVoiceMessage(chatId, msg);
         return;
       }
 
@@ -98,6 +106,51 @@ export class BotService {
               message_id: query.message.message_id
             });
             logger.info('Message text edited successfully.');
+          } catch (e: any) {
+            logger.error(`Ignored edit error: ${e.message}`);
+          }
+         } else if (query.data.startsWith('voice_accept:')) {
+          const taskId = query.data.split(':')[1];
+          const taskText = this.pendingVoiceTasks.get(taskId);
+          if (!taskText) {
+            await this.bot.answerCallbackQuery(query.id, { text: '❌ Task not found or expired', show_alert: true });
+            return;
+          }
+          this.pendingVoiceTasks.delete(taskId);
+          
+          await this.bot.answerCallbackQuery(query.id, { text: '✅ Task accepted!' });
+          
+          try {
+            await this.bot.editMessageText(`🎙 *Transcribed Task Accepted:*\n_"${taskText}"_\n\n🚀 Starting execution...`, {
+              chat_id: chatId,
+              message_id: query.message.message_id,
+              parse_mode: 'Markdown'
+            });
+          } catch (e: any) {
+            logger.error(`Ignored edit error: ${e.message}`);
+          }
+          
+          const statusCallback = async (updateMsg: string) => {
+            try {
+              await this.sendChunkedMessage(chatId, updateMsg);
+            } catch (err) {
+              logger.error('Failed to send telegram msg:', err);
+            }
+          };
+          agentCore.handleTask(taskText, statusCallback);
+          
+        } else if (query.data.startsWith('voice_cancel:')) {
+          const taskId = query.data.split(':')[1];
+          this.pendingVoiceTasks.delete(taskId);
+          
+          await this.bot.answerCallbackQuery(query.id, { text: '❌ Task cancelled' });
+          
+          try {
+            await this.bot.editMessageText(`❌ *Transcription Cancelled.*`, {
+              chat_id: chatId,
+              message_id: query.message.message_id,
+              parse_mode: 'Markdown'
+            });
           } catch (e: any) {
             logger.error(`Ignored edit error: ${e.message}`);
           }
@@ -186,10 +239,19 @@ export class BotService {
       case '/fullaccess':
         const subcmd = text.split(' ')[1];
         if (subcmd === 'enable' || subcmd === 'confirm') {
-          permissionSystem.enableFullAccess();
+          const durationStr = text.split(' ')[2];
+          let durationMs = 15 * 60 * 1000;
+          if (durationStr) {
+            const parsed = parseDurationToMs(durationStr);
+            if (parsed !== null && parsed > 0) {
+              durationMs = parsed;
+            }
+          }
+          permissionSystem.enableFullAccess(durationMs);
+          const minutes = Math.round(durationMs / 60 / 1000);
           const faEnableMsg = `⚠️ *FULL ACCESS ENABLED*\n`
             + `────────────────────────\n`
-            + `Dangerous commands are now permitted outside the sandbox for the next *15 minutes*.\n`
+            + `Dangerous commands are now permitted outside the sandbox for the next *${minutes} minutes*.\n`
             + `All actions are logged and audited.`;
           await this.bot.sendMessage(chatId, faEnableMsg, { parse_mode: 'Markdown' });
         } else if (subcmd === 'disable') {
@@ -199,10 +261,13 @@ export class BotService {
             + `Full Access has been disabled. Actions are restricted to the sandbox.`;
           await this.bot.sendMessage(chatId, faDisableMsg, { parse_mode: 'Markdown' });
         } else {
+          const isFA = permissionSystem.isFullAccess();
+          const remainingMin = permissionSystem.getFullAccessRemainingMinutes();
           const faStatusMsg = `🛡 *Access Security Status*\n`
             + `────────────────────────\n`
-            + `• *Current Mode:* *${permissionSystem.isFullAccess() ? '⚠️ FULL ACCESS (15m)' : '🔒 RESTRICTED (Sandbox only)'}*\n\n`
-            + `• To enable: \`/fullaccess enable\`\n`
+            + `• *Current Mode:* *${isFA ? `⚠️ FULL ACCESS (${remainingMin}m remaining)` : '🔒 RESTRICTED (Sandbox only)'}*\n\n`
+            + `• To enable: \`/fullaccess enable\` (15 minutes)\n`
+            + `• To enable custom duration: \`/fullaccess enable <duration>\` (e.g. \`30m\`, \`2h\`)\n`
             + `• To disable: \`/fullaccess disable\``;
           await this.bot.sendMessage(chatId, faStatusMsg, { parse_mode: 'Markdown' });
         }
@@ -365,8 +430,39 @@ export class BotService {
             } else {
               await this.bot.sendMessage(chatId, `❌ *Invalid Value:* Please specify \`true\` or \`false\`.`, { parse_mode: 'Markdown' });
             }
+          } else if (cfgSubcmd === 'whisper_enabled') {
+            const isTrue = cfgValStr.toLowerCase() === 'true' || cfgValStr === 'on' || cfgValStr === '1';
+            const isFalse = cfgValStr.toLowerCase() === 'false' || cfgValStr === 'off' || cfgValStr === '0';
+            if (isTrue || isFalse) {
+              const val = isTrue ? 'true' : 'false';
+              if (!envContent.includes('WHISPER_ENABLED=')) {
+                envContent += `\nWHISPER_ENABLED=${val}`;
+              } else {
+                envContent = envContent.replace(/WHISPER_ENABLED=.*/, `WHISPER_ENABLED=${val}`);
+              }
+              config.WHISPER_ENABLED = isTrue;
+              fs.writeFileSync(envPath, envContent);
+              await this.bot.sendMessage(chatId, `✅ *Configuration Updated*\n────────────────────────\n• *WHISPER_ENABLED* is now set to \`${val}\``, { parse_mode: 'Markdown' });
+            } else {
+              await this.bot.sendMessage(chatId, `❌ *Invalid Value:* Please specify \`true\` or \`false\`.`, { parse_mode: 'Markdown' });
+            }
+          } else if (cfgSubcmd === 'whisper_model') {
+            const allowedModels = ['tiny', 'base', 'small', 'medium', 'large'];
+            const val = cfgValStr.toLowerCase();
+            if (allowedModels.includes(val)) {
+              if (!envContent.includes('WHISPER_MODEL=')) {
+                envContent += `\nWHISPER_MODEL=${val}`;
+              } else {
+                envContent = envContent.replace(/WHISPER_MODEL=.*/, `WHISPER_MODEL=${val}`);
+              }
+              config.WHISPER_MODEL = val;
+              fs.writeFileSync(envPath, envContent);
+              await this.bot.sendMessage(chatId, `✅ *Configuration Updated*\n────────────────────────\n• *WHISPER_MODEL* is now set to \`${val}\` (CPU RAM usage: tiny: ~70MB, base: ~140MB, small: ~460MB)`, { parse_mode: 'Markdown' });
+            } else {
+              await this.bot.sendMessage(chatId, `❌ *Invalid Value:* Use one of: \`tiny\`, \`base\`, \`small\`, \`medium\`, \`large\`.`, { parse_mode: 'Markdown' });
+            }
           } else {
-            await this.bot.sendMessage(chatId, `❌ *Unknown Parameter:* Use \`loops\`, \`timeout\`, \`reasoning\`, or \`loop_limit\`.`, { parse_mode: 'Markdown' });
+            await this.bot.sendMessage(chatId, `❌ *Unknown Parameter:* Use \`loops\`, \`timeout\`, \`reasoning\`, \`loop_limit\`, \`whisper_enabled\`, or \`whisper_model\`.`, { parse_mode: 'Markdown' });
           }
         } else {
           const cfgMsg = `⚙️ *XaCode Configuration Options*\n`
@@ -374,17 +470,119 @@ export class BotService {
             + `• *MAX_LOOPS:* \`${config.MAX_LOOPS}\` steps\n`
             + `• *MAX_EXECUTION_TIMEOUT_MS:* \`${config.MAX_EXECUTION_TIMEOUT_MS}\` ms\n`
             + `• *SHOW_REASONING:* \`${config.SHOW_REASONING}\` (Output deep thought stream)\n`
-            + `• *LOOP_LIMIT:* \`${!config.DISABLE_LOOP_LIMIT}\` (Enforce execution loop safety checks)\n\n`
+            + `• *LOOP_LIMIT:* \`${!config.DISABLE_LOOP_LIMIT}\` (Enforce execution loop safety checks)\n`
+            + `• *WHISPER_ENABLED:* \`${config.WHISPER_ENABLED}\` (Local voice transcription)\n`
+            + `• *WHISPER_MODEL:* \`${config.WHISPER_MODEL}\` (Transcription quality/RAM model)\n\n`
             + `*To update config, type:*\n`
-            + `• \`/config loops <value>\` (e.g. \`/config loops 40\`)\n`
-            + `• \`/config timeout <value>\` (e.g. \`/config timeout 60000\`)\n`
-            + `• \`/config reasoning <true|false>\` (e.g. \`/config reasoning true\`)\n`
-            + `• \`/config loop_limit <true|false>\` (e.g. \`/config loop_limit false\`)`;
+            + `• \`/config loops <value>\`\n`
+            + `• \`/config timeout <value>\`\n`
+            + `• \`/config reasoning <true|false>\`\n`
+            + `• \`/config loop_limit <true|false>\`\n`
+            + `• \`/config whisper_enabled <true|false>\`\n`
+            + `• \`/config whisper_model <tiny|base|small|medium|large>\``;
           await this.bot.sendMessage(chatId, cfgMsg, { parse_mode: 'Markdown' });
         }
         break;
       default:
         await this.bot.sendMessage(chatId, '❓ *Unknown command.*\nType `/help` to see all available commands.', { parse_mode: 'Markdown' });
+    }
+  }
+
+  private async handleVoiceMessage(chatId: number, msg: TelegramBot.Message) {
+    if (!config.WHISPER_ENABLED) {
+      await this.bot.sendMessage(
+        chatId, 
+        `🎙 *Voice messages are currently disabled.*\nTo enable them, use command:\n\`/config whisper_enabled true\``,
+        { parse_mode: 'Markdown' }
+      );
+      return;
+    }
+
+    if (!msg.voice) return;
+
+    const fileId = msg.voice.file_id;
+    const processMsg = await this.bot.sendMessage(chatId, `⏳ *Downloading and transcribing voice message...*`, { parse_mode: 'Markdown' });
+
+    try {
+      const tmpDir = path.join(process.cwd(), 'temp');
+      if (!fs.existsSync(tmpDir)) {
+        fs.mkdirSync(tmpDir, { recursive: true });
+      }
+      
+      const audioPath = await this.bot.downloadFile(fileId, tmpDir);
+      
+      const { exec } = require('child_process');
+      const scriptPath = path.join(process.cwd(), 'scripts', 'transcribe.py');
+      const pythonCmd = `python "${scriptPath}" "${audioPath}" "${config.WHISPER_MODEL}"`;
+      
+      logger.info(`Running Whisper transcription: ${pythonCmd}`);
+      
+      exec(pythonCmd, async (error: any, stdout: string, stderr: string) => {
+        // Clean up temporary downloaded file
+        try {
+          if (fs.existsSync(audioPath)) {
+            fs.unlinkSync(audioPath);
+          }
+        } catch (cleanupErr) {
+          logger.warn(`Failed to clean up temp voice file: ${cleanupErr}`);
+        }
+
+        // Delete the downloading helper message
+        try {
+          await this.bot.deleteMessage(chatId, processMsg.message_id);
+        } catch (e) {}
+
+        if (error) {
+          logger.error(`Whisper transcription failed: ${error.message}`);
+          await this.bot.sendMessage(chatId, `❌ *Transcription Error:*\n\`${error.message}\``, { parse_mode: 'Markdown' });
+          return;
+        }
+
+        try {
+          const result = JSON.parse(stdout.trim());
+          if (result.error) {
+            await this.bot.sendMessage(chatId, `❌ *Transcription Error:*\n\`${result.error}\``, { parse_mode: 'Markdown' });
+            return;
+          }
+
+          const transcribedText = result.text;
+          if (!transcribedText || transcribedText.trim() === '') {
+            await this.bot.sendMessage(chatId, `📭 *Could not recognize any speech in the voice message.*`);
+            return;
+          }
+
+          // Store in pending tasks map
+          const taskId = `voice_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+          this.pendingVoiceTasks.set(taskId, transcribedText);
+
+          // Send confirmation with buttons
+          const confirmMsg = `🎙 *Voice Transcription result:*\n`
+            + `────────────────────────\n`
+            + `_"${transcribedText}"_\n\n`
+            + `Do you want to run this task?`;
+
+          await this.bot.sendMessage(chatId, confirmMsg, {
+            parse_mode: 'Markdown',
+            reply_markup: {
+              inline_keyboard: [
+                [
+                  { text: '✅ Принять (Accept)', callback_data: `voice_accept:${taskId}` },
+                  { text: '❌ Отменить (Cancel)', callback_data: `voice_cancel:${taskId}` }
+                ]
+              ]
+            }
+          });
+        } catch (jsonErr) {
+          logger.error(`Failed to parse Whisper stdout: ${stdout}. Err: ${jsonErr}`);
+          await this.bot.sendMessage(chatId, `❌ *Failed to parse transcription output.*`);
+        }
+      });
+    } catch (err: any) {
+      logger.error(`Failed to download voice file: ${err.message}`);
+      try {
+        await this.bot.deleteMessage(chatId, processMsg.message_id);
+      } catch (e) {}
+      await this.bot.sendMessage(chatId, `❌ *Failed to retrieve voice file:* \`${err.message}\``);
     }
   }
 
@@ -421,6 +619,22 @@ export class BotService {
       remaining = remaining.substring(MAX_LENGTH);
       await send(chunk);
     }
+  }
+}
+
+export function parseDurationToMs(str: string): number | null {
+  const clean = str.trim().toLowerCase();
+  const match = clean.match(/^(\d+)(ms|s|m|h|d)?$/);
+  if (!match) return null;
+  const val = parseInt(match[1], 10);
+  const unit = match[2] || 'm'; // default to minutes
+  switch (unit) {
+    case 'ms': return val;
+    case 's': return val * 1000;
+    case 'm': return val * 60 * 1000;
+    case 'h': return val * 60 * 60 * 1000;
+    case 'd': return val * 24 * 60 * 60 * 1000;
+    default: return null;
   }
 }
 

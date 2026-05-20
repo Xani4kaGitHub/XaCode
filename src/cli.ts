@@ -137,6 +137,8 @@ async function monitorStatus() {
       output += `${side} Full Access Mode : ${fullAccessColor.padEnd(49)}${colors.reset} ${side}\n`;
       output += `${side} Show Reasoning   : ${showReasoningColor.padEnd(49)}${colors.reset} ${side}\n`;
       output += `${side} Loop Limit Bypass: ${disableLoopLimitColor.padEnd(49)}${colors.reset} ${side}\n`;
+      output += `${side} Whisper Transcr. : ${info.whisperEnabled ? colors.green + 'ENABLED'.padEnd(37) : colors.yellow + 'DISABLED'.padEnd(37)}${colors.reset} ${side}\n`;
+      output += `${side} Whisper Model    : ${colors.cyan}${info.whisperModel.padEnd(38)}${colors.reset} ${side}\n`;
       output += `${side} Agent Uptime     : ${(uptime + ' seconds').padEnd(38)} ${side}\n`;
       output += `${side}                                                        ${side}\n`;
       output += `${side} ${colors.green}[ MEMORY & CONTEXT ]${colors.reset}                                     ${side}\n`;
@@ -185,6 +187,8 @@ async function main() {
         console.log(`│ Full Access Mode : ${info.fullAccess ? colors.red + 'ENABLED [UNSAFE]' : colors.green + 'DISABLED [SAFE]'}${colors.reset}`);
         console.log(`│ Show Reasoning   : ${info.showReasoning ? colors.green + 'ON' : colors.yellow + 'OFF'}${colors.reset}`);
         console.log(`│ Loop Limit Bypass: ${info.disableLoopLimit ? colors.red + 'ON [NO LIMIT]' : colors.green + 'OFF [SAFE]'}${colors.reset}`);
+        console.log(`│ Whisper Transcr. : ${info.whisperEnabled ? colors.green + 'ENABLED' : colors.yellow + 'DISABLED'}${colors.reset}`);
+        console.log(`│ Whisper Model    : ${colors.cyan}${info.whisperModel}${colors.reset}`);
         console.log(`│ Agent Uptime     : ${Math.round(info.metrics.uptimeMs / 1000)} seconds`);
         console.log(`${colors.green}│${colors.reset}`);
         console.log(`${colors.green}│ [ MEMORY & CONTEXT ]${colors.reset}`);
@@ -260,6 +264,49 @@ async function main() {
       console.log(`${colors.green}${banRes.message}${colors.reset}`);
       break;
 
+    case 'fullaccess':
+      const faAction = args[1];
+      if (!faAction || !['enable', 'disable', 'status'].includes(faAction)) {
+        console.error(`${colors.red}Usage: xacode fullaccess <enable|disable|status> [duration (e.g. 30m, 2h)]${colors.reset}`);
+        process.exit(1);
+      }
+      if (faAction === 'enable') {
+        const durStr = args[2];
+        let durationMs = 15 * 60 * 1000;
+        if (durStr) {
+          const clean = durStr.trim().toLowerCase();
+          const match = clean.match(/^(\d+)(ms|s|m|h|d)?$/);
+          if (match) {
+            const val = parseInt(match[1], 10);
+            const unit = match[2] || 'm';
+            let parsed = null;
+            if (unit === 'ms') parsed = val;
+            else if (unit === 's') parsed = val * 1000;
+            else if (unit === 'm') parsed = val * 60 * 1000;
+            else if (unit === 'h') parsed = val * 60 * 60 * 1000;
+            else if (unit === 'd') parsed = val * 24 * 60 * 60 * 1000;
+            if (parsed !== null && parsed > 0) {
+              durationMs = parsed;
+            }
+          }
+        }
+        console.log(`${colors.yellow}Requesting Full Access activation...${colors.reset}`);
+        const res: any = await sendIPCCommand('fullaccess', { action: 'enable', durationMs });
+        console.log(`${colors.green}${res.message}${colors.reset}`);
+      } else if (faAction === 'disable') {
+        console.log(`${colors.yellow}Deactivating Full Access...${colors.reset}`);
+        const res: any = await sendIPCCommand('fullaccess', { action: 'disable' });
+        console.log(`${colors.green}${res.message}${colors.reset}`);
+      } else {
+        const res: any = await sendIPCCommand('fullaccess', { action: 'status' });
+        if (res.isFullAccess) {
+          console.log(`Full Access Mode: ${colors.red}ENABLED [UNSAFE]${colors.reset} (${res.remainingMinutes} minutes remaining)`);
+        } else {
+          console.log(`Full Access Mode: ${colors.green}DISABLED [SAFE]${colors.reset} (restricted to sandbox)`);
+        }
+      }
+      break;
+
     case 'models':
       printLogo();
       const envPath = path.join(process.cwd(), '.env');
@@ -324,8 +371,8 @@ async function main() {
     case 'config':
       const cfgKey = args[1];
       const cfgVal = args[2];
-      if (!cfgKey || !cfgVal || !['loops', 'timeout', 'reasoning', 'loop_limit'].includes(cfgKey)) {
-        console.error(`${colors.red}Usage: xacode config <loops|timeout|reasoning|loop_limit> <new_value>${colors.reset}`);
+      if (!cfgKey || !cfgVal || !['loops', 'timeout', 'reasoning', 'loop_limit', 'whisper_enabled', 'whisper_model'].includes(cfgKey)) {
+        console.error(`${colors.red}Usage: xacode config <loops|timeout|reasoning|loop_limit|whisper_enabled|whisper_model> <new_value>${colors.reset}`);
         process.exit(1);
       }
       console.log(`${colors.yellow}Updating config ${cfgKey} to ${cfgVal}...${colors.reset}`);
@@ -380,6 +427,7 @@ async function main() {
       console.log('  config <loops|timeout|reasoning|loop_limit> <val> - Update system configuration parameters');
       console.log('  status                      - Stream real-time status dashboard (ESC/Ctrl+C to exit)');
       console.log('  ban <telegram_id>           - Ban a user ID from accessing the bot');
+      console.log('  fullaccess <enable|disable|status> [dur] - Enable/disable full filesystem access (e.g. 30m, 1h)');
       console.log('  logs                        - Stream live agent logs');
       console.log('  task "prompt"               - Run a task locally (Ctrl+C to abort)');
       console.log('  stop_task                   - Halt agent execution');

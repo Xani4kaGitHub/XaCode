@@ -4,6 +4,8 @@ import { toolDefinitions, executeTool } from '../tools';
 import { logger } from '../logger';
 import { llmProvider } from '../llm/Provider';
 import { agentStateMachine, AgentState } from './StateMachine';
+import { metricsTracker } from '../metrics/MetricsTracker';
+import { contextManager } from '../memory/ContextManager';
 
 export class AgentCore {
   private isExecuting: boolean = false;
@@ -27,7 +29,15 @@ When the task is complete, return a clear summary and explicitly state that the 
 
 CRITICAL RULES:
 1. SANDBOX RESTRICTIONS: You are restricted to the 'sandbox/' directory. If you try to read/write outside it, you will get a forbidden error. If you MUST access project files outside the sandbox, ask the user to type '/fullaccess enable' first.
-2. NON-INTERACTIVE COMMANDS ONLY: The terminal runs in the background. Never run interactive commands (like 'npm init', 'apt-get install' without '-y', or 'python -i'). Always provide '-y' flags or 'echo' piping, otherwise the terminal will hang and time out after 30 seconds.`;
+2. NON-INTERACTIVE COMMANDS ONLY: The terminal runs in the background. Never run interactive commands (like 'npm init', 'apt-get install' without '-y', or 'python -i'). Always provide '-y' flags or 'echo' piping, otherwise the terminal will hang and time out after 30 seconds.
+3. TELEGRAM FORMATTING & STYLE:
+   - NEVER use Markdown tables (do NOT use columns with pipes like |---|). Telegram does not support them and they look broken.
+   - To present tables or structured parameters (like login credentials, ports, or links), always use premium list formatting with high-quality emojis:
+     🌐 *Адрес:* \`https://...\`
+     👤 *Логин:* \`username\`
+     🔑 *Пароль:* \`password\`
+   - Use clean spacing and clear sections. Never mix nested bullet points inside raw text or code blocks.
+   - For outputs, credentials, and configuration values, write them clearly and wrap them in monospace text (using single backticks like \`value\`) so they are easy to copy-paste. Avoid combining lists and monospace values in a messy way (like "- *Пароль:* \`value\`" - instead write: "• *Пароль:* \`value\`" on a new line).`;
 
     // Only reset memory if we don't want continuous context, but user wanted memory.
     // For now we assume continuous conversation memory unless /reset is called.
@@ -37,8 +47,26 @@ CRITICAL RULES:
     
     memoryManager.addMessage({ role: 'user', content: task });
 
+    const startMetrics = metricsTracker.getMetrics();
+
     try {
       await this.runLoop(statusCallback);
+      
+      const endMetrics = metricsTracker.getMetrics();
+      const tokensSpent = endMetrics.tokenUsage - startMetrics.tokenUsage;
+      const costSpent = endMetrics.apiCost - startMetrics.apiCost;
+      const memoryStats = contextManager.getMemoryStats();
+      const remainingTokens = memoryStats.maxTokens - memoryStats.usageTokens;
+      const percentUsed = Math.round((memoryStats.usageTokens / memoryStats.maxTokens) * 100);
+      
+      const statsMsg = `📊 *Task Execution Metrics:*\n`
+        + `────────────────────────\n`
+        + `• *Tokens Spent (this run):* \`${tokensSpent.toLocaleString()}\`\n`
+        + `• *Estimated Cost:* \`$${costSpent.toFixed(4)}\`\n`
+        + `• *Context Usage:* \`${memoryStats.usageTokens} / ${memoryStats.maxTokens}\` tokens (${percentUsed}%)\n`
+        + `• *Context Remaining:* \`${remainingTokens.toLocaleString()}\` tokens`;
+      
+      await statusCallback(statsMsg);
     } catch (e: any) {
       logger.error('Agent loop crashed:', e);
       await statusCallback(`❌ *Agent crashed:*\n\`${e.message}\``);

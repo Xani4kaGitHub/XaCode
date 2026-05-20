@@ -70,6 +70,8 @@ export class IPCServer {
           fullAccess: permissionSystem.isFullAccess(),
           showReasoning: config.SHOW_REASONING,
           disableLoopLimit: config.DISABLE_LOOP_LIMIT,
+          whisperEnabled: config.WHISPER_ENABLED,
+          whisperModel: config.WHISPER_MODEL,
           system: {
             pid: process.pid,
             nodeVersion: process.version,
@@ -148,6 +150,24 @@ export class IPCServer {
         }
         return { status: 'OK', message: 'Agent was already idle.' };
 
+      case 'fullaccess':
+        const action = args.action;
+        if (action === 'enable') {
+          const duration = args.durationMs;
+          permissionSystem.enableFullAccess(duration);
+          const minutes = Math.round((duration || 15 * 60 * 1000) / 1000 / 60);
+          return { status: 'OK', message: `Full Access enabled for ${minutes} minutes.` };
+        } else if (action === 'disable') {
+          permissionSystem.disableFullAccess();
+          return { status: 'OK', message: 'Full Access disabled.' };
+        } else {
+          return {
+            status: 'OK',
+            isFullAccess: permissionSystem.isFullAccess(),
+            remainingMinutes: permissionSystem.getFullAccessRemainingMinutes()
+          };
+        }
+
       case 'config':
         const cfgEnvPath = path.join(process.cwd(), '.env');
         let cfgEnvContent = await fs.promises.readFile(cfgEnvPath, 'utf8');
@@ -201,6 +221,33 @@ export class IPCServer {
           config.DISABLE_LOOP_LIMIT = !isTrue;
           await fs.promises.writeFile(cfgEnvPath, cfgEnvContent);
           return { status: 'OK', message: `LOOP_LIMIT (enforce loop safety limits) set to ${isTrue ? 'true' : 'false'}.` };
+        } else if (key === 'whisper_enabled') {
+          const isTrue = val.toLowerCase() === 'true' || val === '1' || val.toLowerCase() === 'on';
+          const isFalse = val.toLowerCase() === 'false' || val === '0' || val.toLowerCase() === 'off';
+          if (!isTrue && !isFalse) return { error: 'Invalid whisper_enabled value. Must be true or false' };
+          const writeVal = isTrue ? 'true' : 'false';
+          if (!cfgEnvContent.includes('WHISPER_ENABLED=')) {
+            cfgEnvContent += `\nWHISPER_ENABLED=${writeVal}`;
+          } else {
+            cfgEnvContent = cfgEnvContent.replace(/WHISPER_ENABLED=.*/, `WHISPER_ENABLED=${writeVal}`);
+          }
+          config.WHISPER_ENABLED = isTrue;
+          await fs.promises.writeFile(cfgEnvPath, cfgEnvContent);
+          return { status: 'OK', message: `WHISPER_ENABLED set to ${writeVal}.` };
+        } else if (key === 'whisper_model') {
+          const allowedModels = ['tiny', 'base', 'small', 'medium', 'large'];
+          if (!allowedModels.includes(val.toLowerCase())) {
+            return { error: `Invalid whisper_model. Must be one of: ${allowedModels.join(', ')}` };
+          }
+          const writeVal = val.toLowerCase();
+          if (!cfgEnvContent.includes('WHISPER_MODEL=')) {
+            cfgEnvContent += `\nWHISPER_MODEL=${writeVal}`;
+          } else {
+            cfgEnvContent = cfgEnvContent.replace(/WHISPER_MODEL=.*/, `WHISPER_MODEL=${writeVal}`);
+          }
+          config.WHISPER_MODEL = writeVal;
+          await fs.promises.writeFile(cfgEnvPath, cfgEnvContent);
+          return { status: 'OK', message: `WHISPER_MODEL set to ${writeVal}.` };
         }
         return { error: 'Invalid config key' };
 

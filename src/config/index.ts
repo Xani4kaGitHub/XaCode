@@ -14,6 +14,8 @@ export interface Config {
   MAX_LOOPS: number;
   SHOW_REASONING: boolean;
   DISABLE_LOOP_LIMIT: boolean;
+  WHISPER_ENABLED: boolean;
+  WHISPER_MODEL: string;
 }
 
 export const config: Config = {
@@ -26,6 +28,8 @@ export const config: Config = {
   MAX_LOOPS: parseInt(process.env.MAX_LOOPS || '30', 10),
   SHOW_REASONING: process.env.SHOW_REASONING === 'true',
   DISABLE_LOOP_LIMIT: process.env.DISABLE_LOOP_LIMIT === 'true',
+  WHISPER_ENABLED: process.env.WHISPER_ENABLED === 'true',
+  WHISPER_MODEL: process.env.WHISPER_MODEL || 'tiny',
 };
 
 export function validateConfig() {
