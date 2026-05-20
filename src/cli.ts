@@ -86,6 +86,81 @@ async function sendIPCCommand(command: string, args: any = {}) {
   });
 }
 
+async function monitorStatus() {
+  console.clear();
+  console.log('Starting XaCode real-time monitor... Press ESC or Ctrl+C to exit.');
+  
+  if (process.stdin.isTTY) {
+    process.stdin.setRawMode(true);
+    process.stdin.resume();
+    process.stdin.setEncoding('utf8');
+    process.stdin.on('data', (key: string) => {
+      if (key === '\u0003' || key === '\u001b') {
+        console.clear();
+        process.exit(0);
+      }
+    });
+  }
+
+  process.stdout.write('\x1b[2J\x1b[3J\x1b[H');
+
+  while (true) {
+    try {
+      const info: any = await sendIPCCommand('info');
+      if (info.error) {
+        process.stdout.write('\x1b[H');
+        console.error(`${colors.red}Error: ${info.error}${colors.reset}                                                     `);
+        await new Promise(r => setTimeout(r, 1000));
+        continue;
+      }
+      
+      process.stdout.write('\x1b[H');
+      
+      const stateColor = info.state === 'IDLE' ? colors.green : colors.yellow;
+      const fullAccessColor = info.fullAccess ? colors.red + 'ENABLED [UNSAFE]' : colors.green + 'DISABLED [SAFE]';
+      const showReasoningColor = info.showReasoning ? colors.green + 'ON' : colors.yellow + 'OFF';
+      const disableLoopLimitColor = info.disableLoopLimit ? colors.red + 'ON [NO LIMIT]' : colors.green + 'OFF [SAFE]';
+      const uptime = Math.round(info.metrics.uptimeMs / 1000);
+      const memPercent = Math.round((info.memory.usageTokens / info.memory.maxTokens) * 100);
+      
+      const border = colors.green + '┌────────────────────────────────────────────────────────┐' + colors.reset;
+      const borderBottom = colors.green + '└────────────────────────────────────────────────────────┘' + colors.reset;
+      const divider = colors.green + '├────────────────────────────────────────────────────────┤' + colors.reset;
+      const side = colors.green + '│' + colors.reset;
+      
+      let output = '';
+      output += `${border}\n`;
+      output += `${side}               ${colors.cyan}XACODE LIVE MONITOR (ESC/Ctrl+C to exit)${colors.reset}       ${side}\n`;
+      output += `${divider}\n`;
+      output += `${side} ${colors.green}[ AGENT CORE ]${colors.reset}                                           ${side}\n`;
+      output += `${side} Current State    : ${stateColor}${info.state.padEnd(38)}${colors.reset} ${side}\n`;
+      output += `${side} Full Access Mode : ${fullAccessColor.padEnd(49)}${colors.reset} ${side}\n`;
+      output += `${side} Show Reasoning   : ${showReasoningColor.padEnd(49)}${colors.reset} ${side}\n`;
+      output += `${side} Loop Limit Bypass: ${disableLoopLimitColor.padEnd(49)}${colors.reset} ${side}\n`;
+      output += `${side} Agent Uptime     : ${(uptime + ' seconds').padEnd(38)} ${side}\n`;
+      output += `${side}                                                        ${side}\n`;
+      output += `${side} ${colors.green}[ MEMORY & CONTEXT ]${colors.reset}                                     ${side}\n`;
+      output += `${side} Context Window   : ${(info.memory.usageTokens + ' / ' + info.memory.maxTokens + ' tokens').padEnd(38)} ${side}\n`;
+      output += `${side} Context Usage    : ${(memPercent + '%').padEnd(38)} ${side}\n`;
+      output += `${side} Compressed State : ${(info.memory.hasSummary ? colors.green + 'Active' : colors.yellow + 'Inactive').padEnd(49)}${colors.reset} ${side}\n`;
+      output += `${side}                                                        ${side}\n`;
+      output += `${side} ${colors.green}[ TELEMETRY & METRICS ]${colors.reset}                                  ${side}\n`;
+      output += `${side} Total API Tokens : ${info.metrics.tokenUsage.toString().padEnd(38)} ${side}\n`;
+      output += `${side} API Cost Est.    : $${info.metrics.apiCost.toFixed(4).padEnd(37)} ${side}\n`;
+      output += `${side} LLM Retries      : ${info.metrics.retryCount.toString().padEnd(38)} ${side}\n`;
+      output += `${side} Verification Err : ${info.metrics.verificationFailures.toString().padEnd(38)} ${side}\n`;
+      output += `${side} Stuck Loops Block: ${info.metrics.stuckLoopDetections.toString().padEnd(38)} ${side}\n`;
+      output += `${borderBottom}\n`;
+      
+      process.stdout.write(output);
+    } catch (e: any) {
+      process.stdout.write('\x1b[H');
+      console.error(`${colors.red}Connection error: ${e.message}. Is agent active?${colors.reset}                      `);
+    }
+    await new Promise(r => setTimeout(r, 1000));
+  }
+}
+
 async function main() {
   const args = process.argv.slice(2);
   const command = args[0] || 'help';
@@ -109,6 +184,7 @@ async function main() {
         console.log(`│ Current State    : ${info.state === 'IDLE' ? colors.green : colors.yellow}${info.state}${colors.reset}`);
         console.log(`│ Full Access Mode : ${info.fullAccess ? colors.red + 'ENABLED [UNSAFE]' : colors.green + 'DISABLED [SAFE]'}${colors.reset}`);
         console.log(`│ Show Reasoning   : ${info.showReasoning ? colors.green + 'ON' : colors.yellow + 'OFF'}${colors.reset}`);
+        console.log(`│ Loop Limit Bypass: ${info.disableLoopLimit ? colors.red + 'ON [NO LIMIT]' : colors.green + 'OFF [SAFE]'}${colors.reset}`);
         console.log(`│ Agent Uptime     : ${Math.round(info.metrics.uptimeMs / 1000)} seconds`);
         console.log(`${colors.green}│${colors.reset}`);
         console.log(`${colors.green}│ [ MEMORY & CONTEXT ]${colors.reset}`);
@@ -240,11 +316,16 @@ async function main() {
       process.exit(0);
       break;
 
+    case 'status':
+    case 'monitor':
+      await monitorStatus();
+      break;
+
     case 'config':
       const cfgKey = args[1];
       const cfgVal = args[2];
-      if (!cfgKey || !cfgVal || !['loops', 'timeout', 'reasoning'].includes(cfgKey)) {
-        console.error(`${colors.red}Usage: xacode config <loops|timeout|reasoning> <new_value>${colors.reset}`);
+      if (!cfgKey || !cfgVal || !['loops', 'timeout', 'reasoning', 'loop_limit'].includes(cfgKey)) {
+        console.error(`${colors.red}Usage: xacode config <loops|timeout|reasoning|loop_limit> <new_value>${colors.reset}`);
         process.exit(1);
       }
       console.log(`${colors.yellow}Updating config ${cfgKey} to ${cfgVal}...${colors.reset}`);
@@ -296,7 +377,8 @@ async function main() {
       console.log('  uninstall                   - Completely remove XaCode service and files');
       console.log('  sandbox clear               - Wipes the sandbox directory clean');
       console.log('  auth <telegram|deepseek|model> <val> - Update API tokens or active model');
-      console.log('  config <loops|timeout|reasoning> <val> - Update system configuration parameters');
+      console.log('  config <loops|timeout|reasoning|loop_limit> <val> - Update system configuration parameters');
+      console.log('  status                      - Stream real-time status dashboard (ESC/Ctrl+C to exit)');
       console.log('  ban <telegram_id>           - Ban a user ID from accessing the bot');
       console.log('  logs                        - Stream live agent logs');
       console.log('  task "prompt"               - Run a task locally (Ctrl+C to abort)');

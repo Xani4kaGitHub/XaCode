@@ -23,7 +23,7 @@ export class TerminalManager {
       throw new Error(`Execution outside sandbox is forbidden: ${cwd}. Type /fullaccess enable to allow.`);
     }
 
-    logger.info(`Executing command: ${command}`, { cwd });
+    logger.info(`[Terminal] Executing command: "${command}" in directory: ${cwd}`);
 
     return new Promise((resolve, reject) => {
       // Using ulimit on Linux to enforce resource limits:
@@ -55,11 +55,34 @@ export class TerminalManager {
         if (stderr.length > 10000) stderr = stderr.slice(-8000);
       });
 
+      let hasFinished = false;
+      const finish = (exitCode: number, outStr: string, errStr: string, isTimeout = false) => {
+        if (hasFinished) return;
+        hasFinished = true;
+        
+        const finalStdout = outStr.slice(-8000);
+        const finalStderr = errStr.slice(-8000);
+        
+        if (isTimeout) {
+          logger.warn(`[Terminal] Command timed out after ${config.MAX_EXECUTION_TIMEOUT_MS}ms: "${command}"`);
+        } else {
+          logger.info(`[Terminal] Command "${command}" exited with code ${exitCode}`);
+        }
+        
+        if (finalStdout.trim()) {
+          logger.info(`[Terminal Stdout] for "${command}":\n${finalStdout.trim()}`);
+        }
+        if (finalStderr.trim()) {
+          logger.info(`[Terminal Stderr] for "${command}":\n${finalStderr.trim()}`);
+        }
+        
+        resolve({ stdout: finalStdout, stderr: finalStderr, code: exitCode });
+      };
+
       const timeoutId = setTimeout(() => {
         if (this.activeProcesses.has(processId)) {
-          logger.warn(`Command timed out after ${config.MAX_EXECUTION_TIMEOUT_MS}ms: ${command}`);
           this.killChildSafely(child, isWin);
-          resolve({ stdout, stderr: stderr + '\n[TIMEOUT KILLED]', code: 124 });
+          finish(124, stdout, stderr + '\n[TIMEOUT KILLED]', true);
           this.activeProcesses.delete(processId);
         }
       }, config.MAX_EXECUTION_TIMEOUT_MS);
@@ -67,12 +90,13 @@ export class TerminalManager {
       child.on('close', (code) => {
         clearTimeout(timeoutId);
         this.activeProcesses.delete(processId);
-        resolve({ stdout: stdout.slice(-8000), stderr: stderr.slice(-8000), code: code ?? 1 });
+        finish(code ?? 0, stdout, stderr);
       });
 
       child.on('error', (err) => {
         clearTimeout(timeoutId);
         this.activeProcesses.delete(processId);
+        logger.error(`[Terminal] Process error for "${command}": ${err.message}`);
         reject(err);
       });
     });

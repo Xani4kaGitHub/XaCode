@@ -348,19 +348,38 @@ export class BotService {
             } else {
               await this.bot.sendMessage(chatId, `❌ *Invalid Value:* Please specify \`true\` or \`false\`.`, { parse_mode: 'Markdown' });
             }
+          } else if (cfgSubcmd === 'loop_limit') {
+            const isTrue = cfgValStr.toLowerCase() === 'true' || cfgValStr === 'on' || cfgValStr === '1';
+            const isFalse = cfgValStr.toLowerCase() === 'false' || cfgValStr === 'off' || cfgValStr === '0';
+            if (isTrue || isFalse) {
+              const val = isTrue ? 'true' : 'false';
+              const disableVal = isTrue ? 'false' : 'true';
+              if (!envContent.includes('DISABLE_LOOP_LIMIT=')) {
+                envContent += `\nDISABLE_LOOP_LIMIT=${disableVal}`;
+              } else {
+                envContent = envContent.replace(/DISABLE_LOOP_LIMIT=.*/, `DISABLE_LOOP_LIMIT=${disableVal}`);
+              }
+              config.DISABLE_LOOP_LIMIT = !isTrue;
+              fs.writeFileSync(envPath, envContent);
+              await this.bot.sendMessage(chatId, `✅ *Configuration Updated*\n────────────────────────\n• *LOOP_LIMIT* is now set to \`${val}\` (Limits: ${isTrue ? 'Enforced' : 'Bypassed'})`, { parse_mode: 'Markdown' });
+            } else {
+              await this.bot.sendMessage(chatId, `❌ *Invalid Value:* Please specify \`true\` or \`false\`.`, { parse_mode: 'Markdown' });
+            }
           } else {
-            await this.bot.sendMessage(chatId, `❌ *Unknown Parameter:* Use \`loops\`, \`timeout\`, or \`reasoning\`.`, { parse_mode: 'Markdown' });
+            await this.bot.sendMessage(chatId, `❌ *Unknown Parameter:* Use \`loops\`, \`timeout\`, \`reasoning\`, or \`loop_limit\`.`, { parse_mode: 'Markdown' });
           }
         } else {
           const cfgMsg = `⚙️ *XaCode Configuration Options*\n`
             + `────────────────────────\n`
             + `• *MAX_LOOPS:* \`${config.MAX_LOOPS}\` steps\n`
             + `• *MAX_EXECUTION_TIMEOUT_MS:* \`${config.MAX_EXECUTION_TIMEOUT_MS}\` ms\n`
-            + `• *SHOW_REASONING:* \`${config.SHOW_REASONING}\` (Output deep thought stream)\n\n`
+            + `• *SHOW_REASONING:* \`${config.SHOW_REASONING}\` (Output deep thought stream)\n`
+            + `• *LOOP_LIMIT:* \`${!config.DISABLE_LOOP_LIMIT}\` (Enforce execution loop safety checks)\n\n`
             + `*To update config, type:*\n`
             + `• \`/config loops <value>\` (e.g. \`/config loops 40\`)\n`
             + `• \`/config timeout <value>\` (e.g. \`/config timeout 60000\`)\n`
-            + `• \`/config reasoning <true|false>\``;
+            + `• \`/config reasoning <true|false>\` (e.g. \`/config reasoning true\`)\n`
+            + `• \`/config loop_limit <true|false>\` (e.g. \`/config loop_limit false\`)`;
           await this.bot.sendMessage(chatId, cfgMsg, { parse_mode: 'Markdown' });
         }
         break;

@@ -69,6 +69,7 @@ export class IPCServer {
           memory: contextManager.getMemoryStats(),
           fullAccess: permissionSystem.isFullAccess(),
           showReasoning: config.SHOW_REASONING,
+          disableLoopLimit: config.DISABLE_LOOP_LIMIT,
           system: {
             pid: process.pid,
             nodeVersion: process.version,
@@ -187,6 +188,19 @@ export class IPCServer {
           config.SHOW_REASONING = isTrue;
           await fs.promises.writeFile(cfgEnvPath, cfgEnvContent);
           return { status: 'OK', message: `SHOW_REASONING set to ${writeVal}.` };
+        } else if (key === 'loop_limit') {
+          const isTrue = val.toLowerCase() === 'true' || val === '1' || val.toLowerCase() === 'on';
+          const isFalse = val.toLowerCase() === 'false' || val === '0' || val.toLowerCase() === 'off';
+          if (!isTrue && !isFalse) return { error: 'Invalid loop_limit value. Must be true or false' };
+          const writeVal = isTrue ? 'false' : 'true';
+          if (!cfgEnvContent.includes('DISABLE_LOOP_LIMIT=')) {
+            cfgEnvContent += `\nDISABLE_LOOP_LIMIT=${writeVal}`;
+          } else {
+            cfgEnvContent = cfgEnvContent.replace(/DISABLE_LOOP_LIMIT=.*/, `DISABLE_LOOP_LIMIT=${writeVal}`);
+          }
+          config.DISABLE_LOOP_LIMIT = !isTrue;
+          await fs.promises.writeFile(cfgEnvPath, cfgEnvContent);
+          return { status: 'OK', message: `LOOP_LIMIT (enforce loop safety limits) set to ${isTrue ? 'true' : 'false'}.` };
         }
         return { error: 'Invalid config key' };
 

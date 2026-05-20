@@ -60,7 +60,7 @@ CRITICAL RULES:
     let recentActions: string[] = [];
     let recentToolResults: string[] = [];
 
-    while (loopCount < MAX_LOOPS && this.isExecuting && agentStateMachine.getState() !== AgentState.STOPPED) {
+    while ((config.DISABLE_LOOP_LIMIT || loopCount < MAX_LOOPS) && this.isExecuting && agentStateMachine.getState() !== AgentState.STOPPED) {
       loopCount++;
       await memoryManager.ensureCompressed();
       const messages: any[] = memoryManager.getHistory();
@@ -164,7 +164,7 @@ CRITICAL RULES:
       }
     }
 
-    if (loopCount >= MAX_LOOPS) {
+    if (!config.DISABLE_LOOP_LIMIT && loopCount >= MAX_LOOPS) {
       await statusCallback('⚠️ *Warning:* Maximum execution loops reached. Halting execution to prevent infinite loop.');
     }
   }
