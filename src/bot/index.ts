@@ -120,60 +120,98 @@ export class BotService {
     switch (cmd) {
       case '/start':
       case '/help':
-        const helpMsg = `🤖 **XaCode Enterprise Bot**\n\n`
+        const helpMsg = `🤖 *XaCode Enterprise Bot v1.1.0*\n`
+          + `────────────────────────\n`
           + `Here are the available commands:\n\n`
-          + `📊 **Status & Analytics**\n`
-          + `/status - View current task status\n`
-          + `/plan - View current execution plan\n`
-          + `/cost - View persistent API costs\n`
-          + `/files - List files modified by current task\n\n`
-          + `⚙️ **Configuration**\n`
-          + `/model - Switch DeepSeek API model\n`
-          + `/fullaccess <enable|disable> - Manage Full Access mode\n\n`
-          + `🛠 **System**\n`
-          + `/sandbox clear - Wipe the sandbox directory\n`
-          + `/workspace - Show current workspace info\n`
-          + `/terminal - Info about background terminals\n\n`
-          + `🛑 **Control**\n`
-          + `/stop - Abort current task immediately\n`
-          + `/reset - Clear bot memory and context`;
+          + `📊 *Status & Analytics*\n`
+          + `• \`/status\` — View current task status\n`
+          + `• \`/plan\` — View current execution plan\n`
+          + `• \`/cost\` — View persistent API costs\n`
+          + `• \`/files\` — List files modified by current task\n\n`
+          + `⚙️ *Configuration*\n`
+          + `• \`/model\` — Switch DeepSeek API model\n`
+          + `• \`/fullaccess <enable|disable>\` — Manage Full Access mode\n\n`
+          + `🛠 *System*\n`
+          + `• \`/sandbox clear\` — Wipe the sandbox directory\n`
+          + `• \`/workspace\` — Show current workspace info\n`
+          + `• \`/terminal\` — Info about background terminals\n\n`
+          + `🛑 *Control*\n`
+          + `• \`/stop\` — Abort current task immediately\n`
+          + `• \`/reset\` — Clear bot memory and context`;
         await this.bot.sendMessage(chatId, helpMsg, { parse_mode: 'Markdown' });
         break;
       case '/plan':
         const context = memoryManager.getTaskContext();
-        await this.bot.sendMessage(chatId, `Current Task: ${context.originalRequest || 'None'}\nStep: ${context.currentStep}`);
+        const planMsg = `📋 *Current Execution Plan*\n`
+          + `────────────────────────\n`
+          + `• *Task:* \`${context.originalRequest || 'None'}\`\n`
+          + `• *Step:* \`${context.currentStep || 'Idle'}\``;
+        await this.bot.sendMessage(chatId, planMsg, { parse_mode: 'Markdown' });
         break;
       case '/status':
         const ctx = memoryManager.getTaskContext();
-        await this.bot.sendMessage(chatId, `Agent Status: ${ctx.status}\nTask: ${ctx.originalRequest}\nStep: ${ctx.currentStep}\nFiles Modified: ${ctx.filesModified.length}`);
+        const statusMsg = `📊 *Agent Current Status*\n`
+          + `────────────────────────\n`
+          + `• *🚦 Status:* *${ctx.status}*\n`
+          + `• *📝 Task:* \`${ctx.originalRequest || 'None'}\`\n`
+          + `• *📍 Step:* \`${ctx.currentStep || 'Idle'}\`\n`
+          + `• *📁 Files Modified:* *${ctx.filesModified.length}*`;
+        await this.bot.sendMessage(chatId, statusMsg, { parse_mode: 'Markdown' });
         break;
       case '/stop':
         agentCore.stop();
         terminalManager.killAll();
-        await this.bot.sendMessage(chatId, 'Agent and all background terminals stopped immediately.');
+        const stopMsg = `🛑 *Execution Halted*\n`
+          + `────────────────────────\n`
+          + `Agent execution has been aborted immediately.\n`
+          + `All active background processes have been terminated.`;
+        await this.bot.sendMessage(chatId, stopMsg, { parse_mode: 'Markdown' });
         break;
       case '/reset':
         memoryManager.resetSession('You are XaCode.');
-        await this.bot.sendMessage(chatId, 'Memory and context have been completely reset.');
+        const resetMsg = `🧹 *Session Reset*\n`
+          + `────────────────────────\n`
+          + `Agent memory and context have been completely cleared.\n`
+          + `Ready for a new task!`;
+        await this.bot.sendMessage(chatId, resetMsg, { parse_mode: 'Markdown' });
         break;
       case '/workspace':
-        await this.bot.sendMessage(chatId, `Current Workspace: Active Sandbox`);
+        const wsMsg = `📁 *Workspace Environment*\n`
+          + `────────────────────────\n`
+          + `• *Sandbox Path:* \`${config.SANDBOX_DIR}\`\n`
+          + `• *Security Mode:* *${permissionSystem.isFullAccess() ? '⚠️ FULL ACCESS' : '🔒 RESTRICTED SANDBOX'}*`;
+        await this.bot.sendMessage(chatId, wsMsg, { parse_mode: 'Markdown' });
         break;
       case '/fullaccess':
         const subcmd = text.split(' ')[1];
         if (subcmd === 'enable' || subcmd === 'confirm') {
           permissionSystem.enableFullAccess();
-          await this.bot.sendMessage(chatId, '⚠️ FULL ACCESS MODE ENABLED. Dangerous commands are permitted for the next 15 minutes. All actions are audited.');
+          const faEnableMsg = `⚠️ *FULL ACCESS ENABLED*\n`
+            + `────────────────────────\n`
+            + `Dangerous commands are now permitted outside the sandbox for the next *15 minutes*.\n`
+            + `All actions are logged and audited.`;
+          await this.bot.sendMessage(chatId, faEnableMsg, { parse_mode: 'Markdown' });
         } else if (subcmd === 'disable') {
           permissionSystem.disableFullAccess();
-          await this.bot.sendMessage(chatId, 'Full Access Mode disabled.');
+          const faDisableMsg = `🔒 *RESTRICTED SANDBOX ACTIVATED*\n`
+            + `────────────────────────\n`
+            + `Full Access has been disabled. Actions are restricted to the sandbox.`;
+          await this.bot.sendMessage(chatId, faDisableMsg, { parse_mode: 'Markdown' });
         } else {
-          await this.bot.sendMessage(chatId, `Full Access Status: ${permissionSystem.isFullAccess() ? 'ENABLED' : 'DISABLED'}`);
+          const faStatusMsg = `🛡 *Access Security Status*\n`
+            + `────────────────────────\n`
+            + `• *Current Mode:* *${permissionSystem.isFullAccess() ? '⚠️ FULL ACCESS (15m)' : '🔒 RESTRICTED (Sandbox only)'}*\n\n`
+            + `• To enable: \`/fullaccess enable\`\n`
+            + `• To disable: \`/fullaccess disable\``;
+          await this.bot.sendMessage(chatId, faStatusMsg, { parse_mode: 'Markdown' });
         }
         break;
       case '/files':
         const files = memoryManager.getTaskContext().filesModified;
-        await this.bot.sendMessage(chatId, `Modified Files:\n${files.length > 0 ? files.join('\n') : 'No files modified yet.'}`);
+        const filesMsg = `📂 *Modified Files Log*\n`
+          + `────────────────────────\n`
+          + `${files.length > 0 ? files.map(f => `• \`${f}\``).join('\n') : '_No files modified in this session._'}`;
+        await this.bot.sendMessage(chatId, filesMsg, { parse_mode: 'Markdown' });
         break;
       case '/model':
         const modelArg = text.split(' ')[1];
@@ -190,18 +228,32 @@ export class BotService {
           config.DEEPSEEK_MODEL = modelArg;
           fs.writeFileSync(envPath, envContent);
 
-          await this.bot.sendMessage(chatId, `✅ Model successfully switched to: ${modelArg}`);
+          const switchMsg = `✅ *Model Switched Successfully*\n`
+            + `────────────────────────\n`
+            + `Active model is now: \`${modelArg}\``;
+          await this.bot.sendMessage(chatId, switchMsg, { parse_mode: 'Markdown' });
         } else {
-          const modelMsg = `🧠 **DeepSeek Model Selection**\n\n`
-            + `Current active model: \`${config.DEEPSEEK_MODEL}\`\n\n`
-            + `*Promo Prices (Ukraine, May 2026):*\n`
-            + `🚀 **V4 Pro**: $0.435 (In) / $0.87 (Out)\n`
-            + `⚡ **V4 Flash**: $0.14 (In) / $0.28 (Out)\n\n`
-            + `To switch models, type:\n`
-            + `/model deepseek-v4-pro\n`
-            + `/model deepseek-v4-flash`;
+          const modelMsg = `🧠 *DeepSeek Model Selection*\n`
+            + `────────────────────────\n`
+            + `• *Current Model:* \`${config.DEEPSEEK_MODEL}\`\n\n`
+            + `*Promo Pricing (Ukraine, May 2026):*\n`
+            + `• 🚀 *V4 Pro*: $0.435 (In) / $0.870 (Out)\n`
+            + `• ⚡ *V4 Flash*: $0.140 (In) / $0.280 (Out)\n\n`
+            + `Click a button below or type \`/model [name]\` to switch:`;
             
-          await this.bot.sendMessage(chatId, modelMsg, { parse_mode: 'Markdown' });
+          const replyMarkup = {
+            inline_keyboard: [
+              [
+                { text: '🚀 V4 Pro', callback_data: 'model:deepseek-v4-pro' },
+                { text: '⚡ V4 Flash', callback_data: 'model:deepseek-v4-flash' }
+              ]
+            ]
+          };
+
+          await this.bot.sendMessage(chatId, modelMsg, { 
+            parse_mode: 'Markdown',
+            reply_markup: replyMarkup
+          });
         }
         break;
       case '/sandbox':
@@ -214,29 +266,37 @@ export class BotService {
             fs.rmSync(sandboxDir, { recursive: true, force: true });
             fs.mkdirSync(sandboxDir);
           }
-          await this.bot.sendMessage(chatId, '🧹 Sandbox directory has been securely cleared.');
+          const sbMsg = `🧹 *Sandbox Wiped*\n`
+            + `────────────────────────\n`
+            + `The sandbox directory has been securely cleared.`;
+          await this.bot.sendMessage(chatId, sbMsg, { parse_mode: 'Markdown' });
         } else {
-          await this.bot.sendMessage(chatId, 'Usage: `/sandbox clear`', { parse_mode: 'Markdown' });
+          await this.bot.sendMessage(chatId, '❓ *Usage:* \`/sandbox clear\`', { parse_mode: 'Markdown' });
         }
         break;
       case '/cost':
         const { metricsTracker } = require('../metrics/MetricsTracker');
         const session = metricsTracker.getMetrics();
         const persistent = metricsTracker.getPersistentMetrics();
-        const costMsg = `💰 **XaCode Financial Analytics**\n\n`
-          + `*All-Time Usage (Persistent):*\n`
-          + `- Total Tokens: ${persistent.tokenUsage.toLocaleString()}\n`
-          + `- Total Cost: $${persistent.apiCost.toFixed(4)}\n\n`
-          + `*Current Session:*\n`
-          + `- Session Tokens: ${session.tokenUsage.toLocaleString()}\n`
-          + `- Session Cost: $${session.apiCost.toFixed(4)}`;
+        const costMsg = `💰 *XaCode Financial Analytics*\n`
+          + `────────────────────────\n`
+          + `📊 *All-Time Usage (Persistent)*\n`
+          + `• Tokens: \`${persistent.tokenUsage.toLocaleString()}\`\n`
+          + `• Cost: *$${persistent.apiCost.toFixed(4)}*\n\n`
+          + `⏱ *Current Session*\n`
+          + `• Tokens: \`${session.tokenUsage.toLocaleString()}\`\n`
+          + `• Cost: *$${session.apiCost.toFixed(4)}*`;
         await this.bot.sendMessage(chatId, costMsg, { parse_mode: 'Markdown' });
         break;
       case '/terminal':
-        await this.bot.sendMessage(chatId, 'Active background processes are managed automatically. Check logs for details.');
+        const termMsg = `💻 *Background Terminals*\n`
+          + `────────────────────────\n`
+          + `• *Active Processes:* *${terminalManager.getActiveProcessesCount()}*\n\n`
+          + `_Background processes are monitored and closed automatically. Check logs for details._`;
+        await this.bot.sendMessage(chatId, termMsg, { parse_mode: 'Markdown' });
         break;
       default:
-        await this.bot.sendMessage(chatId, 'Unknown command.');
+        await this.bot.sendMessage(chatId, '❓ *Unknown command.*\nType `/help` to see all available commands.', { parse_mode: 'Markdown' });
     }
   }
 

@@ -7,6 +7,10 @@ import { permissionSystem } from '../security/PermissionSystem';
 export class TerminalManager {
   private activeProcesses: Map<string, ChildProcessWithoutNullStreams> = new Map();
 
+  getActiveProcessesCount(): number {
+    return this.activeProcesses.size;
+  }
+
   /**
    * Executes a command with a timeout and returns its output.
    */
