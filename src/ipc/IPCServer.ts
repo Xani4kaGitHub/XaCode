@@ -4,11 +4,10 @@ import path from 'path';
 import crypto from 'crypto';
 import { logger } from '../logger';
 import { metricsTracker } from '../metrics/MetricsTracker';
-import { agentStateMachine, AgentState } from '../agent/StateMachine';
-import { contextManager } from '../memory/ContextManager';
+import { AgentState } from '../agent/StateMachine';
 import { permissionSystem } from '../security/PermissionSystem';
 import { config } from '../config';
-import { agentCore } from '../agent';
+import { agentOrchestrator } from '../agent';
 
 export class IPCServer {
   private server: net.Server;
@@ -65,8 +64,8 @@ export class IPCServer {
         return {
           status: 'OK',
           metrics: metricsTracker.getMetrics(),
-          state: agentStateMachine.getState(),
-          memory: contextManager.getMemoryStats(),
+          state: agentOrchestrator.getSession(0).stateMachine.getState(),
+          memory: agentOrchestrator.getSession(0).memoryManager.contextManager.getMemoryStats(),
           fullAccess: permissionSystem.isFullAccess(),
           showReasoning: config.SHOW_REASONING,
           disableLoopLimit: config.DISABLE_LOOP_LIMIT,
@@ -140,12 +139,12 @@ export class IPCServer {
 
       case 'task':
         // Start task asynchronously, don't await here otherwise IPC blocks
-        agentCore.handleTask(args.prompt, (msg: string) => logger.info(`[Task] ${msg}`)).catch(e => logger.error(`CLI Task error: ${e.message}`));
+        agentOrchestrator.getSession(0).handleTask(args.prompt, (msg: string) => logger.info(`[Task] ${msg}`)).catch(e => logger.error(`CLI Task error: ${e.message}`));
         return { status: 'OK', message: 'Task submitted.' };
 
       case 'stop_task':
-        if (agentStateMachine.getState() !== AgentState.IDLE) {
-          agentStateMachine.transition(AgentState.STOPPED);
+        if (agentOrchestrator.getSession(0).stateMachine.getState() !== AgentState.IDLE) {
+          agentOrchestrator.getSession(0).stateMachine.transition(AgentState.STOPPED);
           return { status: 'OK', message: 'Agent execution halted.' };
         }
         return { status: 'OK', message: 'Agent was already idle.' };

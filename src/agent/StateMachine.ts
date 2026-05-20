@@ -71,4 +71,4 @@ export class StateMachine {
   }
 }
 
-export const agentStateMachine = new StateMachine();
+// Removed singleton export

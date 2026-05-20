@@ -2,7 +2,6 @@ import fs from 'fs/promises';
 import path from 'path';
 import { securityManager } from '../security';
 import { permissionSystem } from '../security/PermissionSystem';
-import { memoryManager } from '../memory';
 import { logger } from '../logger';
 
 function checkPathAccess(resolvedPath: string) {
@@ -26,8 +25,6 @@ export async function writeFile(targetPath: string, content: string): Promise<st
   // Create directories if they don't exist
   await fs.mkdir(path.dirname(resolvedPath), { recursive: true });
   await fs.writeFile(resolvedPath, content, 'utf8');
-  
-  memoryManager.addModifiedFile(resolvedPath);
   logger.info(`Wrote file: ${resolvedPath}`);
   
   return `File ${resolvedPath} successfully written.`;
@@ -58,8 +55,6 @@ export async function editFile(targetPath: string, search: string, replace: stri
   
   const newContent = content.replace(exactSearchInFile, replace);
   await fs.writeFile(resolvedPath, newContent, 'utf8');
-  
-  memoryManager.addModifiedFile(resolvedPath);
   logger.info(`Edited file: ${resolvedPath}`);
 
   return `File ${resolvedPath} successfully edited.`;

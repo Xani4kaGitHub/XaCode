@@ -131,4 +131,4 @@ Make it concise. Previous summary: ${this.summarizedMemory}`;
   }
 }
 
-export const contextManager = new ContextManager();
+// Removed singleton export

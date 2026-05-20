@@ -1,7 +1,7 @@
 import { eventBus, EVENTS } from '../events/EventBus';
 import { logger } from '../logger';
-import { agentStateMachine, AgentState } from './StateMachine';
-
+import { AgentState } from './StateMachine';
+import { agentOrchestrator } from './index';
 export class ProtectionSystem {
   private verificationFailures = 0;
   private totalToolCalls = 0;
@@ -49,11 +49,11 @@ export class ProtectionSystem {
   }
 
   private haltExecution(reason: string) {
-    if (agentStateMachine.getState() !== AgentState.FAILED && agentStateMachine.getState() !== AgentState.STOPPED) {
-      agentStateMachine.transition(AgentState.FAILED);
+    if (agentOrchestrator.getSession(0).stateMachine.getState() !== AgentState.FAILED && agentOrchestrator.getSession(0).stateMachine.getState() !== AgentState.STOPPED) {
+      agentOrchestrator.getSession(0).stateMachine.transition(AgentState.FAILED);
       logger.error('Execution halted by Protection System. Diagnostics generated.');
       // Emit event so the orchestrator can notify the user via Telegram
-      eventBus.emit(EVENTS.AGENT_STATE_CHANGED, { oldState: agentStateMachine.getState(), newState: AgentState.FAILED, reason });
+      eventBus.emit(EVENTS.AGENT_STATE_CHANGED, { oldState: agentOrchestrator.getSession(0).stateMachine.getState(), newState: AgentState.FAILED, reason });
     }
   }
 

@@ -3,8 +3,7 @@ import { config } from '../config';
 import { securityManager } from '../security';
 import fs from 'fs';
 import path from 'path';
-import { agentCore } from '../agent';
-import { memoryManager } from '../memory';
+import { agentOrchestrator } from '../agent';
 import { terminalManager } from '../terminal';
 import { logger } from '../logger';
 import { permissionSystem } from '../security/PermissionSystem';
@@ -53,7 +52,7 @@ export class BotService {
         }
       };
 
-      agentCore.handleTask(text, statusCallback);
+      agentOrchestrator.getSession(chatId).handleTask(text, statusCallback);
     });
 
     this.bot.on('callback_query', async (query) => {
@@ -81,27 +80,29 @@ export class BotService {
           
           // Update in memory and file
           const envPath = require('path').join(process.cwd(), '.env');
-          const fs = require('fs');
-          let envContent = fs.readFileSync(envPath, 'utf8');
+          let envContent = await fs.promises.readFile(envPath, 'utf8');
           if (!envContent.includes('DEEPSEEK_MODEL=')) {
             envContent += `\nDEEPSEEK_MODEL=${selectedModel}`;
           } else {
             envContent = envContent.replace(/DEEPSEEK_MODEL=.*/, `DEEPSEEK_MODEL=${selectedModel}`);
           }
           config.DEEPSEEK_MODEL = selectedModel;
-          fs.writeFileSync(envPath, envContent);
+          await fs.promises.writeFile(envPath, envContent);
 
           logger.info('Model switch complete, showing alert popup.');
-          // We show an alert popup instead of editing the message text to avoid any Telegram parsing errors
           await this.bot.answerCallbackQuery(query.id, {
-            text: `✅ Model switched to: ${selectedModel}`,
-            show_alert: true
+            text: `✅ Model switched to: ${selectedModel}`
           });
           
-          logger.info('Attempting to edit message text...');
-          // Optionally, edit the message to remove buttons but keep it simple text
           try {
-            await this.bot.editMessageText(`Model is now: ${selectedModel}`, {
+            await this.bot.editMessageReplyMarkup({
+              inline_keyboard: [
+                [
+                  { text: selectedModel === 'deepseek-v4-pro' ? '✅ 🚀 V4 Pro' : '🚀 V4 Pro', callback_data: 'model:deepseek-v4-pro' },
+                  { text: selectedModel === 'deepseek-v4-flash' ? '✅ ⚡ V4 Flash' : '⚡ V4 Flash', callback_data: 'model:deepseek-v4-flash' }
+                ]
+              ]
+            }, {
               chat_id: chatId,
               message_id: query.message.message_id
             });
@@ -137,7 +138,7 @@ export class BotService {
               logger.error('Failed to send telegram msg:', err);
             }
           };
-          agentCore.handleTask(taskText, statusCallback);
+          agentOrchestrator.getSession(chatId).handleTask(taskText, statusCallback);
           
         } else if (query.data.startsWith('voice_cancel:')) {
           const taskId = query.data.split(':')[1];
@@ -162,8 +163,7 @@ export class BotService {
         if (query.message) {
           await this.bot.sendMessage(query.message.chat.id, `❌ Error switching model: ${error.message}`);
         }
-      } finally {
-        this.bot.answerCallbackQuery(query.id).catch(() => {});
+        await this.bot.answerCallbackQuery(query.id).catch(() => {});
       }
     });
   }
@@ -194,16 +194,17 @@ export class BotService {
           + `• \`/reset\` — Clear bot memory and context`;
         await this.bot.sendMessage(chatId, helpMsg, { parse_mode: 'Markdown' });
         break;
-      case '/plan':
-        const context = memoryManager.getTaskContext();
+      case '/plan': {
+        const context = agentOrchestrator.getSession(chatId).memoryManager.getTaskContext();
         const planMsg = `📋 *Current Execution Plan*\n`
           + `────────────────────────\n`
           + `• *Task:* \`${context.originalRequest || 'None'}\`\n`
           + `• *Step:* \`${context.currentStep || 'Idle'}\``;
         await this.bot.sendMessage(chatId, planMsg, { parse_mode: 'Markdown' });
         break;
-      case '/status':
-        const ctx = memoryManager.getTaskContext();
+      }
+      case '/status': {
+        const ctx = agentOrchestrator.getSession(chatId).memoryManager.getTaskContext();
         const statusMsg = `📊 *Agent Current Status*\n`
           + `────────────────────────\n`
           + `• *🚦 Status:* *${ctx.status}*\n`
@@ -212,8 +213,9 @@ export class BotService {
           + `• *📁 Files Modified:* *${ctx.filesModified.length}*`;
         await this.bot.sendMessage(chatId, statusMsg, { parse_mode: 'Markdown' });
         break;
-      case '/stop':
-        agentCore.stop();
+      }
+      case '/stop': {
+        agentOrchestrator.getSession(chatId).stop();
         terminalManager.killAll();
         const stopMsg = `🛑 *Execution Halted*\n`
           + `────────────────────────\n`
@@ -221,21 +223,24 @@ export class BotService {
           + `All active background processes have been terminated.`;
         await this.bot.sendMessage(chatId, stopMsg, { parse_mode: 'Markdown' });
         break;
-      case '/reset':
-        memoryManager.resetSession('You are XaCode.');
+      }
+      case '/reset': {
+        agentOrchestrator.getSession(chatId).memoryManager.resetSession('You are XaCode.');
         const resetMsg = `🧹 *Session Reset*\n`
           + `────────────────────────\n`
           + `Agent memory and context have been completely cleared.\n`
           + `Ready for a new task!`;
         await this.bot.sendMessage(chatId, resetMsg, { parse_mode: 'Markdown' });
         break;
-      case '/workspace':
+      }
+      case '/workspace': {
         const wsMsg = `📁 *Workspace Environment*\n`
           + `────────────────────────\n`
           + `• *Sandbox Path:* \`${config.SANDBOX_DIR}\`\n`
           + `• *Security Mode:* *${permissionSystem.isFullAccess() ? '⚠️ FULL ACCESS' : '🔒 RESTRICTED SANDBOX'}*`;
         await this.bot.sendMessage(chatId, wsMsg, { parse_mode: 'Markdown' });
         break;
+      }
       case '/fullaccess':
         const subcmd = text.split(' ')[1];
         if (subcmd === 'enable' || subcmd === 'confirm') {
@@ -272,27 +277,27 @@ export class BotService {
           await this.bot.sendMessage(chatId, faStatusMsg, { parse_mode: 'Markdown' });
         }
         break;
-      case '/files':
-        const files = memoryManager.getTaskContext().filesModified;
+      case '/files': {
+        const files = agentOrchestrator.getSession(chatId).memoryManager.getTaskContext().filesModified;
         const filesMsg = `📂 *Modified Files Log*\n`
           + `────────────────────────\n`
           + `${files.length > 0 ? files.map(f => `• \`${f}\``).join('\n') : '_No files modified in this session._'}`;
         await this.bot.sendMessage(chatId, filesMsg, { parse_mode: 'Markdown' });
         break;
-      case '/model':
+      }
+      case '/model': {
         const modelArg = text.split(' ')[1];
         if (modelArg) {
           // Update in memory and file
           const envPath = require('path').join(process.cwd(), '.env');
-          const fs = require('fs');
-          let envContent = fs.readFileSync(envPath, 'utf8');
+          let envContent = await fs.promises.readFile(envPath, 'utf8');
           if (!envContent.includes('DEEPSEEK_MODEL=')) {
             envContent += `\nDEEPSEEK_MODEL=${modelArg}`;
           } else {
             envContent = envContent.replace(/DEEPSEEK_MODEL=.*/, `DEEPSEEK_MODEL=${modelArg}`);
           }
           config.DEEPSEEK_MODEL = modelArg;
-          fs.writeFileSync(envPath, envContent);
+          await fs.promises.writeFile(envPath, envContent);
 
           const switchMsg = `✅ *Model Switched Successfully*\n`
             + `────────────────────────\n`
@@ -310,8 +315,8 @@ export class BotService {
           const replyMarkup = {
             inline_keyboard: [
               [
-                { text: '🚀 V4 Pro', callback_data: 'model:deepseek-v4-pro' },
-                { text: '⚡ V4 Flash', callback_data: 'model:deepseek-v4-flash' }
+                { text: config.DEEPSEEK_MODEL === 'deepseek-v4-pro' ? '✅ 🚀 V4 Pro' : '🚀 V4 Pro', callback_data: 'model:deepseek-v4-pro' },
+                { text: config.DEEPSEEK_MODEL === 'deepseek-v4-flash' ? '✅ ⚡ V4 Flash' : '⚡ V4 Flash', callback_data: 'model:deepseek-v4-flash' }
               ]
             ]
           };
@@ -322,7 +327,8 @@ export class BotService {
           });
         }
         break;
-      case '/sandbox':
+      }
+      case '/sandbox': {
         const sbArg = text.split(' ')[1];
         if (sbArg === 'clear') {
           const fs = require('fs');
@@ -340,7 +346,8 @@ export class BotService {
           await this.bot.sendMessage(chatId, '❓ *Usage:* \`/sandbox clear\`', { parse_mode: 'Markdown' });
         }
         break;
-      case '/cost':
+      }
+      case '/cost': {
         const { metricsTracker } = require('../metrics/MetricsTracker');
         const session = metricsTracker.getMetrics();
         const persistent = metricsTracker.getPersistentMetrics();
@@ -354,20 +361,21 @@ export class BotService {
           + `• Cost: *$${session.apiCost.toFixed(4)}*`;
         await this.bot.sendMessage(chatId, costMsg, { parse_mode: 'Markdown' });
         break;
-      case '/terminal':
+      }
+      case '/terminal': {
         const termMsg = `💻 *Background Terminals*\n`
           + `────────────────────────\n`
           + `• *Active Processes:* *${terminalManager.getActiveProcessesCount()}*\n\n`
           + `_Background processes are monitored and closed automatically. Check logs for details._`;
         await this.bot.sendMessage(chatId, termMsg, { parse_mode: 'Markdown' });
         break;
-      case '/config':
+      }
+      case '/config': {
         const cfgSubcmd = text.split(' ')[1];
         const cfgValStr = text.split(' ')[2];
         if (cfgSubcmd && cfgValStr) {
           const envPath = require('path').join(process.cwd(), '.env');
-          const fs = require('fs');
-          let envContent = fs.readFileSync(envPath, 'utf8');
+          let envContent = await fs.promises.readFile(envPath, 'utf8');
           
           if (cfgSubcmd === 'loops') {
             const num = parseInt(cfgValStr, 10);
@@ -378,7 +386,7 @@ export class BotService {
                 envContent = envContent.replace(/MAX_LOOPS=.*/, `MAX_LOOPS=${num}`);
               }
               config.MAX_LOOPS = num;
-              fs.writeFileSync(envPath, envContent);
+              await fs.promises.writeFile(envPath, envContent);
               await this.bot.sendMessage(chatId, `✅ *Configuration Updated*\n────────────────────────\n• *MAX_LOOPS* is now set to \`${num}\``, { parse_mode: 'Markdown' });
             } else {
               await this.bot.sendMessage(chatId, `❌ *Invalid Value:* Please specify a positive integer for loops.`, { parse_mode: 'Markdown' });
@@ -392,7 +400,7 @@ export class BotService {
                 envContent = envContent.replace(/MAX_EXECUTION_TIMEOUT_MS=.*/, `MAX_EXECUTION_TIMEOUT_MS=${num}`);
               }
               config.MAX_EXECUTION_TIMEOUT_MS = num;
-              fs.writeFileSync(envPath, envContent);
+              await fs.promises.writeFile(envPath, envContent);
               await this.bot.sendMessage(chatId, `✅ *Configuration Updated*\n────────────────────────\n• *MAX_EXECUTION_TIMEOUT_MS* is now set to \`${num}\` ms`, { parse_mode: 'Markdown' });
             } else {
               await this.bot.sendMessage(chatId, `❌ *Invalid Value:* Please specify a positive integer for timeout.`, { parse_mode: 'Markdown' });
@@ -408,7 +416,7 @@ export class BotService {
                 envContent = envContent.replace(/SHOW_REASONING=.*/, `SHOW_REASONING=${val}`);
               }
               config.SHOW_REASONING = isTrue;
-              fs.writeFileSync(envPath, envContent);
+              await fs.promises.writeFile(envPath, envContent);
               await this.bot.sendMessage(chatId, `✅ *Configuration Updated*\n────────────────────────\n• *SHOW_REASONING* is now set to \`${val}\``, { parse_mode: 'Markdown' });
             } else {
               await this.bot.sendMessage(chatId, `❌ *Invalid Value:* Please specify \`true\` or \`false\`.`, { parse_mode: 'Markdown' });
@@ -425,7 +433,7 @@ export class BotService {
                 envContent = envContent.replace(/DISABLE_LOOP_LIMIT=.*/, `DISABLE_LOOP_LIMIT=${disableVal}`);
               }
               config.DISABLE_LOOP_LIMIT = !isTrue;
-              fs.writeFileSync(envPath, envContent);
+              await fs.promises.writeFile(envPath, envContent);
               await this.bot.sendMessage(chatId, `✅ *Configuration Updated*\n────────────────────────\n• *LOOP_LIMIT* is now set to \`${val}\` (Limits: ${isTrue ? 'Enforced' : 'Bypassed'})`, { parse_mode: 'Markdown' });
             } else {
               await this.bot.sendMessage(chatId, `❌ *Invalid Value:* Please specify \`true\` or \`false\`.`, { parse_mode: 'Markdown' });
@@ -441,7 +449,7 @@ export class BotService {
                 envContent = envContent.replace(/WHISPER_ENABLED=.*/, `WHISPER_ENABLED=${val}`);
               }
               config.WHISPER_ENABLED = isTrue;
-              fs.writeFileSync(envPath, envContent);
+              await fs.promises.writeFile(envPath, envContent);
               await this.bot.sendMessage(chatId, `✅ *Configuration Updated*\n────────────────────────\n• *WHISPER_ENABLED* is now set to \`${val}\``, { parse_mode: 'Markdown' });
             } else {
               await this.bot.sendMessage(chatId, `❌ *Invalid Value:* Please specify \`true\` or \`false\`.`, { parse_mode: 'Markdown' });
@@ -456,7 +464,7 @@ export class BotService {
                 envContent = envContent.replace(/WHISPER_MODEL=.*/, `WHISPER_MODEL=${val}`);
               }
               config.WHISPER_MODEL = val;
-              fs.writeFileSync(envPath, envContent);
+              await fs.promises.writeFile(envPath, envContent);
               await this.bot.sendMessage(chatId, `✅ *Configuration Updated*\n────────────────────────\n• *WHISPER_MODEL* is now set to \`${val}\` (CPU RAM usage: tiny: ~70MB, base: ~140MB, small: ~460MB)`, { parse_mode: 'Markdown' });
             } else {
               await this.bot.sendMessage(chatId, `❌ *Invalid Value:* Use one of: \`tiny\`, \`base\`, \`small\`, \`medium\`, \`large\`.`, { parse_mode: 'Markdown' });
@@ -483,6 +491,7 @@ export class BotService {
           await this.bot.sendMessage(chatId, cfgMsg, { parse_mode: 'Markdown' });
         }
         break;
+      }
       default:
         await this.bot.sendMessage(chatId, '❓ *Unknown command.*\nType `/help` to see all available commands.', { parse_mode: 'Markdown' });
     }

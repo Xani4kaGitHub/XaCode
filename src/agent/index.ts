@@ -1,25 +1,35 @@
 import { config } from '../config';
-import { memoryManager, ChatMessage } from '../memory';
+import { MemoryManager, ChatMessage } from '../memory';
 import { toolDefinitions, executeTool } from '../tools';
 import { logger } from '../logger';
 import { llmProvider } from '../llm/Provider';
-import { agentStateMachine, AgentState } from './StateMachine';
+import { StateMachine, AgentState } from './StateMachine';
 import { metricsTracker } from '../metrics/MetricsTracker';
-import { contextManager } from '../memory/ContextManager';
 
-export class AgentCore {
-  private isExecuting: boolean = false;
+export class AgentSession {
+  public chatId: number;
+  public isExecuting: boolean = false;
+  public memoryManager: MemoryManager;
+  public stateMachine: StateMachine;
+
+  constructor(chatId: number) {
+    this.chatId = chatId;
+    this.memoryManager = new MemoryManager();
+    this.stateMachine = new StateMachine();
+  }
 
   async handleTask(task: string, statusCallback: (msg: string) => Promise<void> | void) {
     if (this.isExecuting) {
-      await statusCallback('⚠️ *Agent is already executing a task.* Use /stop to cancel.');
+      // Mid-execution interruption support
+      this.memoryManager.addMessage({ role: 'user', content: task });
+      await statusCallback('⚠️ *Message added to ongoing task context.*');
       return;
     }
 
     this.isExecuting = true;
-    agentStateMachine.reset();
-    agentStateMachine.transition(AgentState.ANALYZING_TASK);
-    memoryManager.setTask(task);
+    this.stateMachine.reset();
+    this.stateMachine.transition(AgentState.ANALYZING_TASK);
+    this.memoryManager.setTask(task);
     await statusCallback(`🚀 *Task Started:*\n\`${task}\`\n\n🔍 *Analyzing...*`);
 
     const systemPrompt = `You are XaCode, a production-ready AI coding agent.
@@ -37,15 +47,14 @@ CRITICAL RULES:
      👤 *Логин:* \`username\`
      🔑 *Пароль:* \`password\`
    - Use clean spacing and clear sections. Never mix nested bullet points inside raw text or code blocks.
-   - For outputs, credentials, and configuration values, write them clearly and wrap them in monospace text (using single backticks like \`value\`) so they are easy to copy-paste. Avoid combining lists and monospace values in a messy way (like "- *Пароль:* \`value\`" - instead write: "• *Пароль:* \`value\`" on a new line).`;
+   - For outputs, credentials, and configuration values, write them clearly and wrap them in monospace text (using single backticks like \`value\`) so they are easy to copy-paste. Avoid combining lists and monospace values in a messy way (like "- *Пароль:* \`value\`" - instead write: "• *Пароль:* \`value\`" on a new line).
+4. LANGUAGE MATCHING: You MUST reply in the exact same language as the user's prompt. If the user writes in Ukrainian, you MUST reply entirely in Ukrainian. If they write in Russian, reply in Russian.`;
 
-    // Only reset memory if we don't want continuous context, but user wanted memory.
-    // For now we assume continuous conversation memory unless /reset is called.
-    if (memoryManager.getHistory().length === 0) {
-      memoryManager.resetSession(systemPrompt, toolDefinitions as any);
+    if (this.memoryManager.getHistory().length === 0) {
+      this.memoryManager.resetSession(systemPrompt, toolDefinitions as any);
     }
     
-    memoryManager.addMessage({ role: 'user', content: task });
+    this.memoryManager.addMessage({ role: 'user', content: task });
 
     const startMetrics = metricsTracker.getMetrics();
 
@@ -55,7 +64,7 @@ CRITICAL RULES:
       const endMetrics = metricsTracker.getMetrics();
       const tokensSpent = endMetrics.tokenUsage - startMetrics.tokenUsage;
       const costSpent = endMetrics.apiCost - startMetrics.apiCost;
-      const memoryStats = contextManager.getMemoryStats();
+      const memoryStats = this.memoryManager.contextManager.getMemoryStats();
       const remainingTokens = memoryStats.maxTokens - memoryStats.usageTokens;
       const percentUsed = Math.round((memoryStats.usageTokens / memoryStats.maxTokens) * 100);
       
@@ -70,14 +79,14 @@ CRITICAL RULES:
     } catch (e: any) {
       logger.error('Agent loop crashed:', e);
       await statusCallback(`❌ *Agent crashed:*\n\`${e.message}\``);
-      memoryManager.failTask();
-      if (agentStateMachine.getState() !== AgentState.STOPPED) {
-        agentStateMachine.transition(AgentState.FAILED);
+      this.memoryManager.failTask();
+      if (this.stateMachine.getState() !== AgentState.STOPPED) {
+        this.stateMachine.transition(AgentState.FAILED);
       }
     } finally {
       this.isExecuting = false;
-      if (agentStateMachine.getState() !== AgentState.STOPPED) {
-        agentStateMachine.transition(AgentState.IDLE);
+      if (this.stateMachine.getState() !== AgentState.STOPPED) {
+        this.stateMachine.transition(AgentState.IDLE);
       }
     }
   }
@@ -88,20 +97,18 @@ CRITICAL RULES:
     let recentActions: string[] = [];
     let recentToolResults: string[] = [];
 
-    while ((config.DISABLE_LOOP_LIMIT || loopCount < MAX_LOOPS) && this.isExecuting && agentStateMachine.getState() !== AgentState.STOPPED) {
+    while ((config.DISABLE_LOOP_LIMIT || loopCount < MAX_LOOPS) && this.isExecuting && this.stateMachine.getState() !== AgentState.STOPPED) {
       loopCount++;
-      await memoryManager.ensureCompressed();
-      const messages: any[] = memoryManager.getHistory();
+      await this.memoryManager.ensureCompressed();
+      const messages: any[] = this.memoryManager.getHistory();
 
       const response = await llmProvider.chatComplete({
         messages: messages,
         tools: toolDefinitions as any,
       });
 
-      // DeepSeek/OpenAI compat structure
       if (response.toolCalls && response.toolCalls.length > 0) {
-        // Create an assistant message with the tool calls
-        memoryManager.addMessage({
+        this.memoryManager.addMessage({
           role: 'assistant',
           content: response.content || '',
           reasoning_content: response.reasoningContent,
@@ -116,7 +123,7 @@ CRITICAL RULES:
           } catch (e: any) {
             await statusCallback(`⚠️ *Tool Error:* JSON syntax error in arguments for \`${functionName}\`.`);
             logger.error(`JSON parse error for tool ${functionName}`, e);
-            memoryManager.addMessage({
+            this.memoryManager.addMessage({
               role: 'tool',
               tool_call_id: toolCall.id,
               name: functionName,
@@ -125,14 +132,13 @@ CRITICAL RULES:
             continue;
           }
           
-          // Infinite retry hallucination protection
           const actionHash = `${functionName}:${JSON.stringify(args)}`;
           recentActions.push(actionHash);
           if (recentActions.length > 5) recentActions.shift();
           
           const duplicateCount = recentActions.filter(a => a === actionHash).length;
           if (duplicateCount >= 3) {
-            memoryManager.addMessage({
+            this.memoryManager.addMessage({
               role: 'tool',
               tool_call_id: toolCall.id,
               name: functionName,
@@ -147,6 +153,10 @@ CRITICAL RULES:
 
           const toolResult = await executeTool(functionName, args);
           
+          if (functionName === 'write_file' || functionName === 'edit_file') {
+            this.memoryManager.addModifiedFile(args.targetPath);
+          }
+          
           let finalResult = toolResult;
           if (toolResult && toolResult.trim().length > 0) {
             recentToolResults.push(toolResult.trim());
@@ -160,7 +170,7 @@ CRITICAL RULES:
             }
           }
 
-          memoryManager.addMessage({
+          this.memoryManager.addMessage({
             role: 'tool',
             tool_call_id: toolCall.id,
             name: functionName,
@@ -168,7 +178,7 @@ CRITICAL RULES:
           });
         }
       } else {
-        memoryManager.addMessage({ 
+        this.memoryManager.addMessage({ 
           role: 'assistant', 
           content: response.content || '',
           reasoning_content: response.reasoningContent 
@@ -180,14 +190,12 @@ CRITICAL RULES:
 
         await statusCallback(`🤖 *Agent:* ${response.content}`);
 
-        // Decide if we should stop. A simple heuristic is if the agent says it's done or we don't have tools called.
         if (response.content?.toLowerCase().includes('task complete') || response.content?.toLowerCase().includes('task is complete')) {
-          memoryManager.completeTask();
+          this.memoryManager.completeTask();
           await statusCallback(`✅ *Task completed successfully!*`);
           break;
         }
 
-        // If no tool was called, we just wait for the user to respond, we break the auto-loop
         break;
       }
     }
@@ -199,11 +207,22 @@ CRITICAL RULES:
 
   stop() {
     this.isExecuting = false;
-    if (agentStateMachine.getState() !== AgentState.STOPPED) {
-      agentStateMachine.transition(AgentState.STOPPED);
+    if (this.stateMachine.getState() !== AgentState.STOPPED) {
+      this.stateMachine.transition(AgentState.STOPPED);
     }
-    memoryManager.failTask();
+    this.memoryManager.failTask();
   }
 }
 
-export const agentCore = new AgentCore();
+export class AgentOrchestrator {
+  private sessions = new Map<number, AgentSession>();
+
+  getSession(chatId: number): AgentSession {
+    if (!this.sessions.has(chatId)) {
+      this.sessions.set(chatId, new AgentSession(chatId));
+    }
+    return this.sessions.get(chatId)!;
+  }
+}
+
+export const agentOrchestrator = new AgentOrchestrator();

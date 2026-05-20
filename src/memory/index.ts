@@ -1,5 +1,5 @@
 import { logger } from '../logger';
-import { contextManager } from './ContextManager';
+import { ContextManager } from './ContextManager';
 
 export interface TaskContext {
   originalRequest: string;
@@ -18,6 +18,12 @@ export interface ChatMessage {
 }
 
 export class MemoryManager {
+  public contextManager: ContextManager;
+
+  constructor() {
+    this.contextManager = new ContextManager();
+  }
+
   private taskContext: TaskContext = {
     originalRequest: '',
     currentStep: 'Waiting for task',
@@ -29,7 +35,7 @@ export class MemoryManager {
    * Initializes a new session, clearing past history but keeping system prompts.
    */
   resetSession(systemPrompt: string, tools: any[] = []) {
-    contextManager.init(systemPrompt, tools);
+    this.contextManager.init(systemPrompt, tools);
     this.taskContext = {
       originalRequest: '',
       currentStep: 'Waiting for task',
@@ -40,15 +46,15 @@ export class MemoryManager {
   }
 
   addMessage(message: ChatMessage) {
-    contextManager.addMessage(message);
+    this.contextManager.addMessage(message);
   }
 
   async ensureCompressed() {
-    await contextManager.ensureCompressed();
+    await this.contextManager.ensureCompressed();
   }
 
   getHistory(): ChatMessage[] {
-    return contextManager.getMessagesForLLM();
+    return this.contextManager.getMessagesForLLM();
   }
 
   setTask(request: string) {
@@ -81,4 +87,4 @@ export class MemoryManager {
   }
 }
 
-export const memoryManager = new MemoryManager();
+// Removed singleton export
