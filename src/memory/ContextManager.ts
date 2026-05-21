@@ -2,6 +2,7 @@ import { tokenizer } from './Tokenizer';
 import { logger } from '../logger';
 import { eventBus, EVENTS } from '../events/EventBus';
 import { llmProvider } from '../llm/Provider';
+import { config as appConfig } from '../config';
 
 export interface MemoryConfig {
   maxContextTokens: number;
@@ -10,19 +11,21 @@ export interface MemoryConfig {
 }
 
 export class ContextManager {
-  private config: MemoryConfig = {
-    maxContextTokens: 32000,
-    compressionThresholdPercent: 0.85,
-    summaryMaxTokens: 2000,
-  };
+  private config: MemoryConfig;
+
+  constructor() {
+    this.config = {
+      maxContextTokens: appConfig.MAX_CONTEXT_TOKENS || 32000,
+      compressionThresholdPercent: 0.85,
+      summaryMaxTokens: 2000,
+    };
+  }
 
   private shortTermHistory: any[] = [];
   private summarizedMemory: string = '';
   private executionMemory: any = {};
   private systemPrompt: any = null;
   private toolSchemas: any[] = [];
-
-  constructor() {}
 
   init(systemContent: string, tools: any[]) {
     this.systemPrompt = { role: 'system', content: systemContent };

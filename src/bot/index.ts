@@ -406,6 +406,20 @@ export class BotService {
             } else {
               await this.bot.sendMessage(chatId, `❌ *Invalid Value:* Please specify a positive integer for loops.`, { parse_mode: 'Markdown' });
             }
+          } else if (cfgSubcmd === 'max_context') {
+            const num = parseInt(cfgValStr, 10);
+            if (!isNaN(num) && num >= 4000) {
+              if (!envContent.includes('MAX_CONTEXT_TOKENS=')) {
+                envContent += `\nMAX_CONTEXT_TOKENS=${num}`;
+              } else {
+                envContent = envContent.replace(/MAX_CONTEXT_TOKENS=.*/, `MAX_CONTEXT_TOKENS=${num}`);
+              }
+              config.MAX_CONTEXT_TOKENS = num;
+              await fs.promises.writeFile(envPath, envContent);
+              await this.bot.sendMessage(chatId, `✅ *Configuration Updated*\n────────────────────────\n• *MAX_CONTEXT_TOKENS* is now set to \`${num}\``, { parse_mode: 'Markdown' });
+            } else {
+              await this.bot.sendMessage(chatId, `❌ *Invalid Value:* Please specify a positive integer >= 4000 for max context tokens.`, { parse_mode: 'Markdown' });
+            }
           } else if (cfgSubcmd === 'timeout') {
             const num = parseInt(cfgValStr, 10);
             if (!isNaN(num) && num > 0) {
@@ -497,8 +511,9 @@ export class BotService {
             + `• *WHISPER_ENABLED:* \`${config.WHISPER_ENABLED}\` (Local voice transcription)\n`
             + `• *WHISPER_MODEL:* \`${config.WHISPER_MODEL}\` (Transcription quality/RAM model)\n\n`
             + `*To update config, type:*\n`
-            + `• \`/config loops <value>\`\n`
-            + `• \`/config timeout <value>\`\n`
+            + `• \`/config loops <num>\` - Max iteration loops\n`
+            + `• \`/config max_context <num>\` - Max context memory tokens\n`
+            + `• \`/config timeout <ms>\` - Max command runtime\n`
             + `• \`/config reasoning <true|false>\`\n`
             + `• \`/config loop_limit <true|false>\`\n`
             + `• \`/config whisper_enabled <true|false>\`\n`

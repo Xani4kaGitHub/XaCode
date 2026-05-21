@@ -81,24 +81,41 @@ export const toolDefinitions = [
 
 // Execute the tool based on the name and arguments
 export async function executeTool(name: string, args: any): Promise<string> {
+  let result = '';
   try {
     switch (name) {
       case 'read_file':
-        return await readFile(args.targetPath);
+        result = await readFile(args.targetPath);
+        break;
       case 'write_file':
-        return await writeFile(args.targetPath, args.content);
+        result = await writeFile(args.targetPath, args.content);
+        break;
       case 'edit_file':
-        return await editFile(args.targetPath, args.search, args.replace);
+        result = await editFile(args.targetPath, args.search, args.replace);
+        break;
       case 'list_directory':
         const dir = await listDirectory(args.targetPath);
-        return dir.join('\n');
+        result = dir.join('\n');
+        break;
       case 'run_command':
-        const result = await terminalManager.runCommand(args.command, args.cwd);
-        return `Exit Code: ${result.code}\nStdout:\n${result.stdout}\nStderr:\n${result.stderr}`;
+        const termRes = await terminalManager.runCommand(args.command, args.cwd);
+        result = `Exit Code: ${termRes.code}\nStdout:\n${termRes.stdout}\nStderr:\n${termRes.stderr}`;
+        break;
       default:
         throw new Error(`Unknown tool: ${name}`);
     }
   } catch (error: any) {
-    return `Error executing tool ${name}: ${error.message || String(error)}`;
+    result = `Error executing tool ${name}: ${error.message || String(error)}`;
   }
+  
+  // Truncate massively long tool outputs to prevent context explosion
+  // We keep the first 2000 characters and the last 8000 characters so the agent can see both the start and the final errors.
+  const MAX_LENGTH = 10000;
+  if (result.length > MAX_LENGTH) {
+    const startStr = result.substring(0, 2000);
+    const endStr = result.substring(result.length - 8000);
+    result = `${startStr}\n\n...[OUTPUT TRUNCATED: The result was too long (${result.length} chars). Middle section removed to save context memory]...\n\n${endStr}`;
+  }
+  
+  return result;
 }

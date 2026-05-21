@@ -12,6 +12,7 @@ export interface Config {
   SANDBOX_DIR: string;
   MAX_EXECUTION_TIMEOUT_MS: number;
   MAX_LOOPS: number;
+  MAX_CONTEXT_TOKENS: number;
   SHOW_REASONING: boolean;
   DISABLE_LOOP_LIMIT: boolean;
   WHISPER_ENABLED: boolean;
@@ -26,6 +27,7 @@ export const config: Config = {
   SANDBOX_DIR: process.env.SANDBOX_DIR || path.resolve(process.cwd(), 'sandbox'),
   MAX_EXECUTION_TIMEOUT_MS: parseInt(process.env.MAX_EXECUTION_TIMEOUT_MS || '30000', 10),
   MAX_LOOPS: parseInt(process.env.MAX_LOOPS || '30', 10),
+  MAX_CONTEXT_TOKENS: parseInt(process.env.MAX_CONTEXT_TOKENS || '32000', 10),
   SHOW_REASONING: process.env.SHOW_REASONING === 'true',
   DISABLE_LOOP_LIMIT: process.env.DISABLE_LOOP_LIMIT === 'true',
   WHISPER_ENABLED: process.env.WHISPER_ENABLED === 'true',

@@ -183,6 +183,17 @@ export class IPCServer {
           config.MAX_LOOPS = num;
           await fs.promises.writeFile(cfgEnvPath, cfgEnvContent);
           return { status: 'OK', message: `MAX_LOOPS set to ${num}.` };
+        } else if (key === 'max_context') {
+          const num = parseInt(val, 10);
+          if (isNaN(num) || num < 4000) return { error: 'Invalid max_context value (minimum 4000)' };
+          if (!cfgEnvContent.includes('MAX_CONTEXT_TOKENS=')) {
+            cfgEnvContent += `\nMAX_CONTEXT_TOKENS=${num}`;
+          } else {
+            cfgEnvContent = cfgEnvContent.replace(/MAX_CONTEXT_TOKENS=.*/, `MAX_CONTEXT_TOKENS=${num}`);
+          }
+          config.MAX_CONTEXT_TOKENS = num;
+          await fs.promises.writeFile(cfgEnvPath, cfgEnvContent);
+          return { status: 'OK', message: `MAX_CONTEXT_TOKENS set to ${num}.` };
         } else if (key === 'timeout') {
           const num = parseInt(val, 10);
           if (isNaN(num) || num <= 0) return { error: 'Invalid timeout value' };
