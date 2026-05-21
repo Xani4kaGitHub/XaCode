@@ -4,6 +4,8 @@ import fs from 'fs';
 import path from 'path';
 import { spawn, spawnSync } from 'child_process';
 
+const PROJECT_ROOT = path.join(__dirname, '..');
+
 // Auto-elevate to sudo on Linux/macOS if not running as root
 if (process.getuid && process.getuid() !== 0) {
   spawnSync('sudo', [process.execPath, __filename, ...process.argv.slice(2)], { stdio: 'inherit' });
@@ -50,10 +52,10 @@ function printLogo() {
 }
 
 async function sendIPCCommand(command: string, args: any = {}) {
-  const tokenPath = path.join(process.cwd(), '.xacode_ipc_token');
+  const tokenPath = path.join(PROJECT_ROOT, '.xacode_ipc_token');
   const socketPath = process.platform === 'win32' 
-    ? path.join('\\\\?\\pipe', process.cwd(), 'xacode.sock')
-    : path.join(process.cwd(), 'xacode.sock');
+    ? path.join('\\\\?\\pipe', PROJECT_ROOT, 'xacode.sock')
+    : path.join(PROJECT_ROOT, 'xacode.sock');
 
   if (!fs.existsSync(tokenPath)) {
     console.error(`${colors.red}Error: IPC Token not found. Is the XaCode agent running?${colors.reset}`);
@@ -215,7 +217,7 @@ async function main() {
 
     case 'update':
       console.log(`${colors.yellow}Updating XaCode from GitHub...${colors.reset}`);
-      const updateProc = spawn('sudo', ['bash', 'update.sh'], { stdio: 'inherit', cwd: process.cwd() });
+      const updateProc = spawn('sudo', ['bash', 'update.sh'], { stdio: 'inherit', cwd: PROJECT_ROOT });
       updateProc.on('close', (code) => {
         if (code === 0) console.log(`${colors.green}XaCode successfully updated!${colors.reset}`);
         else console.error(`${colors.red}Update failed with code ${code}${colors.reset}`);
@@ -226,7 +228,7 @@ async function main() {
       console.log(`${colors.red}WARNING: This will completely remove XaCode from your system!${colors.reset}`);
       console.log(`Press Ctrl+C within 5 seconds to abort...`);
       setTimeout(() => {
-        const uninstallProc = spawn('sudo', ['bash', 'uninstall.sh'], { stdio: 'inherit', cwd: process.cwd() });
+        const uninstallProc = spawn('sudo', ['bash', 'uninstall.sh'], { stdio: 'inherit', cwd: PROJECT_ROOT });
         uninstallProc.on('close', (code) => {
           if (code === 0) console.log(`${colors.green}XaCode has been uninstalled.${colors.reset}`);
         });
@@ -309,7 +311,7 @@ async function main() {
 
     case 'models':
       printLogo();
-      const envPath = path.join(process.cwd(), '.env');
+      const envPath = path.join(PROJECT_ROOT, '.env');
       let currentModel = 'deepseek-v4-pro';
       if (fs.existsSync(envPath)) {
         const envContent = fs.readFileSync(envPath, 'utf8');
