@@ -11,7 +11,7 @@ import { permissionSystem } from '../security/PermissionSystem';
 export class BotService {
   private bot: TelegramBot;
   private pendingVoiceTasks = new Map<string, string>();
-  private pendingConfigInput = new Map<number, string>();
+  private static pendingConfigInput = new Map<number, string>();
 
   constructor() {
     this.bot = new TelegramBot(config.TELEGRAM_BOT_TOKEN, { polling: true });
@@ -38,15 +38,15 @@ export class BotService {
       // Ignore if it's not a text message
       if (!text) return;
 
-      const pendingCfgKey = this.pendingConfigInput.get(chatId);
+      const pendingCfgKey = BotService.pendingConfigInput.get(userId);
       if (pendingCfgKey && !text.startsWith('/')) {
-        await this.handlePendingConfigInput(chatId, text, pendingCfgKey);
+        await this.handlePendingConfigInput(chatId, userId, text, pendingCfgKey);
         return;
       }
 
       // Handle Commands
       if (text.startsWith('/')) {
-        await this.handleCommand(chatId, text);
+        await this.handleCommand(chatId, userId, text);
         return;
       }
 
@@ -82,7 +82,7 @@ export class BotService {
         logger.info('User allowed, processing callback...');
 
         if (query.data.startsWith('cfg:')) {
-          await this.handleConfigCallback(query, chatId);
+          await this.handleConfigCallback(query, chatId, userId);
         } else if (query.data.startsWith('model:')) {
           const selectedModel = query.data.split(':')[1];
           logger.info(`Selected model: ${selectedModel}`);
@@ -177,7 +177,7 @@ export class BotService {
     });
   }
 
-  private async handleConfigCallback(query: TelegramBot.CallbackQuery, chatId: number) {
+  private async handleConfigCallback(query: TelegramBot.CallbackQuery, chatId: number, userId: number) {
     const data = query.data!;
     const parts = data.split(':');
     const action = parts[1]; // toggle, set, refresh
@@ -222,7 +222,7 @@ export class BotService {
       await this.bot.answerCallbackQuery(query.id, { text: `✅ Изменено: ${key} = ${isTrue}` });
       await this.sendConfigMenu(chatId, query.message?.message_id);
     } else if (action === 'set') {
-      this.pendingConfigInput.set(chatId, key);
+      BotService.pendingConfigInput.set(userId, key);
       await this.bot.answerCallbackQuery(query.id);
       
       const promptMap: Record<string, string> = {
@@ -243,8 +243,8 @@ export class BotService {
     }
   }
 
-  private async handlePendingConfigInput(chatId: number, text: string, key: string) {
-    this.pendingConfigInput.delete(chatId);
+  private async handlePendingConfigInput(chatId: number, userId: number, text: string, key: string) {
+    BotService.pendingConfigInput.delete(userId);
     
     const envPath = require('path').join(process.cwd(), '.env');
     let envContent = await fs.promises.readFile(envPath, 'utf8');
@@ -327,7 +327,7 @@ export class BotService {
     }
   }
 
-  private async handleCommand(chatId: number, text: string) {
+  private async handleCommand(chatId: number, userId: number, text: string) {
     const cmd = text.split(' ')[0].toLowerCase();
     switch (cmd) {
       case '/start':
@@ -549,10 +549,10 @@ export class BotService {
         const cfgValStr = text.split(' ')[2];
         if (cfgSubcmd && cfgValStr) {
           // Keep old manual text commands for backward compatibility
-          await this.handlePendingConfigInput(chatId, cfgValStr, cfgSubcmd);
+          await this.handlePendingConfigInput(chatId, userId, cfgValStr, cfgSubcmd);
         } else {
           // Clear any pending state if user just types /config
-          this.pendingConfigInput.delete(chatId);
+          BotService.pendingConfigInput.delete(userId);
           await this.sendConfigMenu(chatId);
         }
         break;
