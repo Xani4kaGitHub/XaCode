@@ -11,7 +11,6 @@ import { permissionSystem } from '../security/PermissionSystem';
 export class BotService {
   private bot: TelegramBot;
   private pendingVoiceTasks = new Map<string, string>();
-  private static pendingConfigInput = new Map<number, string>();
 
   constructor() {
     this.bot = new TelegramBot(config.TELEGRAM_BOT_TOKEN, { polling: true });
@@ -38,7 +37,17 @@ export class BotService {
       // Ignore if it's not a text message
       if (!text) return;
 
-      const pendingCfgKey = BotService.pendingConfigInput.get(userId);
+      const pendingCfgPath = path.join(process.cwd(), '.xacode_pending_cfg.json');
+      let pendingCfgKey = null;
+      if (fs.existsSync(pendingCfgPath)) {
+        try {
+          const map = JSON.parse(fs.readFileSync(pendingCfgPath, 'utf8'));
+          if (map[userId]) {
+            pendingCfgKey = map[userId];
+          }
+        } catch (e) {}
+      }
+
       if (pendingCfgKey && !text.startsWith('/')) {
         await this.handlePendingConfigInput(chatId, userId, text, pendingCfgKey);
         return;
@@ -222,7 +231,12 @@ export class BotService {
       await this.bot.answerCallbackQuery(query.id, { text: `✅ Изменено: ${key} = ${isTrue}` });
       await this.sendConfigMenu(chatId, query.message?.message_id);
     } else if (action === 'set') {
-      BotService.pendingConfigInput.set(userId, key);
+      const pendingCfgPath = require('path').join(process.cwd(), '.xacode_pending_cfg.json');
+      let map: any = {};
+      try { if (fs.existsSync(pendingCfgPath)) map = JSON.parse(fs.readFileSync(pendingCfgPath, 'utf8')); } catch(e){}
+      map[userId] = key;
+      fs.writeFileSync(pendingCfgPath, JSON.stringify(map));
+
       await this.bot.answerCallbackQuery(query.id);
       
       const promptMap: Record<string, string> = {
@@ -244,7 +258,14 @@ export class BotService {
   }
 
   private async handlePendingConfigInput(chatId: number, userId: number, text: string, key: string) {
-    BotService.pendingConfigInput.delete(userId);
+    const pendingCfgPath = require('path').join(process.cwd(), '.xacode_pending_cfg.json');
+    try {
+      if (fs.existsSync(pendingCfgPath)) {
+        const map = JSON.parse(fs.readFileSync(pendingCfgPath, 'utf8'));
+        delete map[userId];
+        fs.writeFileSync(pendingCfgPath, JSON.stringify(map));
+      }
+    } catch(e){}
     
     const envPath = require('path').join(process.cwd(), '.env');
     let envContent = await fs.promises.readFile(envPath, 'utf8');
@@ -552,7 +573,15 @@ export class BotService {
           await this.handlePendingConfigInput(chatId, userId, cfgValStr, cfgSubcmd);
         } else {
           // Clear any pending state if user just types /config
-          BotService.pendingConfigInput.delete(userId);
+          const pendingCfgPath = require('path').join(process.cwd(), '.xacode_pending_cfg.json');
+          try {
+            if (fs.existsSync(pendingCfgPath)) {
+              const map = JSON.parse(fs.readFileSync(pendingCfgPath, 'utf8'));
+              delete map[userId];
+              fs.writeFileSync(pendingCfgPath, JSON.stringify(map));
+            }
+          } catch(e){}
+          
           await this.sendConfigMenu(chatId);
         }
         break;
