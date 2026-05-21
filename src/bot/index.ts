@@ -502,22 +502,30 @@ export class BotService {
             await this.bot.sendMessage(chatId, `❌ *Unknown Parameter:* Use \`loops\`, \`timeout\`, \`reasoning\`, \`loop_limit\`, \`whisper_enabled\`, or \`whisper_model\`.`, { parse_mode: 'Markdown' });
           }
         } else {
-          const cfgMsg = `⚙️ *XaCode Configuration Options*\n`
-            + `────────────────────────\n`
-            + `• *MAX_LOOPS:* \`${config.MAX_LOOPS}\` steps\n`
-            + `• *MAX_EXECUTION_TIMEOUT_MS:* \`${config.MAX_EXECUTION_TIMEOUT_MS}\` ms\n`
-            + `• *SHOW_REASONING:* \`${config.SHOW_REASONING}\` (Output deep thought stream)\n`
-            + `• *LOOP_LIMIT:* \`${!config.DISABLE_LOOP_LIMIT}\` (Enforce execution loop safety checks)\n`
-            + `• *WHISPER_ENABLED:* \`${config.WHISPER_ENABLED}\` (Local voice transcription)\n`
-            + `• *WHISPER_MODEL:* \`${config.WHISPER_MODEL}\` (Transcription quality/RAM model)\n\n`
-            + `*To update config, type:*\n`
-            + `• \`/config loops <num>\` - Max iteration loops\n`
-            + `• \`/config max_context <num>\` - Max context memory tokens\n`
-            + `• \`/config timeout <ms>\` - Max command runtime\n`
-            + `• \`/config reasoning <true|false>\`\n`
-            + `• \`/config loop_limit <true|false>\`\n`
-            + `• \`/config whisper_enabled <true|false>\`\n`
-            + `• \`/config whisper_model <tiny|base|small|medium|large>\``;
+          const cfgMsg = `⚙️ *Настройки Системы XaCode*\n`
+            + `━━━━━━━━━━━━━━━━━━━━━━━━\n\n`
+            + `🧠 *Память и ИИ*\n`
+            + `🔹 \`MAX_CONTEXT_TOKENS\` : *${config.MAX_CONTEXT_TOKENS}*\n`
+            + `_Лимит токенов контекста памяти_\n`
+            + `🔹 \`SHOW_REASONING\` : *${config.SHOW_REASONING ? '🟢 Вкл' : '🔴 Выкл'}*\n`
+            + `_Показывать внутренние "мысли" агента_\n\n`
+            + `🛡 *Лимиты Выполнения*\n`
+            + `🔹 \`MAX_LOOPS\` : *${config.MAX_LOOPS}* шагов\n`
+            + `_Максимум действий на одну задачу_\n`
+            + `🔹 \`TIMEOUT_MS\` : *${config.MAX_EXECUTION_TIMEOUT_MS}* мс\n`
+            + `_Таймаут команд в терминале_\n`
+            + `🔹 \`LOOP_LIMIT\` : *${!config.DISABLE_LOOP_LIMIT ? '🟢 Безопасный' : '🔴 Без ограничений'}*\n`
+            + `_Защита от зацикливания агента_\n\n`
+            + `🎙 *Голосовое Управление (Whisper)*\n`
+            + `🔹 \`WHISPER_ENABLED\` : *${config.WHISPER_ENABLED ? '🟢 Вкл' : '🔴 Выкл'}*\n`
+            + `🔹 \`WHISPER_MODEL\` : *${config.WHISPER_MODEL}*\n\n`
+            + `━━━━━━━━━━━━━━━━━━━━━━━━\n`
+            + `📝 *Как изменить настройку?*\n`
+            + `Отправьте команду \`/config <параметр> <значение>\`\n`
+            + `_Примеры:_\n`
+            + `• \`/config max_context 64000\`\n`
+            + `• \`/config loops 50\`\n`
+            + `• \`/config reasoning true\``;
           await this.bot.sendMessage(chatId, cfgMsg, { parse_mode: 'Markdown' });
         }
         break;
