@@ -11,6 +11,7 @@ import { permissionSystem } from '../security/PermissionSystem';
 export class BotService {
   private bot: TelegramBot;
   private pendingVoiceTasks = new Map<string, string>();
+  private pendingConfigInput = new Map<number, string>();
 
   constructor() {
     this.bot = new TelegramBot(config.TELEGRAM_BOT_TOKEN, { polling: true });
@@ -36,6 +37,12 @@ export class BotService {
 
       // Ignore if it's not a text message
       if (!text) return;
+
+      const pendingCfgKey = this.pendingConfigInput.get(chatId);
+      if (pendingCfgKey && !text.startsWith('/')) {
+        await this.handlePendingConfigInput(chatId, text, pendingCfgKey);
+        return;
+      }
 
       // Handle Commands
       if (text.startsWith('/')) {
@@ -72,9 +79,11 @@ export class BotService {
           return;
         }
 
-        logger.info('User allowed, processing model switch...');
+        logger.info('User allowed, processing callback...');
 
-        if (query.data.startsWith('model:')) {
+        if (query.data.startsWith('cfg:')) {
+          await this.handleConfigCallback(query, chatId);
+        } else if (query.data.startsWith('model:')) {
           const selectedModel = query.data.split(':')[1];
           logger.info(`Selected model: ${selectedModel}`);
           
@@ -161,11 +170,161 @@ export class BotService {
       } catch (error: any) {
         logger.error(`Callback error: ${error.message}`);
         if (query.message) {
-          await this.bot.sendMessage(query.message.chat.id, `❌ Error switching model: ${error.message}`);
+          await this.bot.sendMessage(query.message.chat.id, `❌ Error processing request: ${error.message}`);
         }
         await this.bot.answerCallbackQuery(query.id).catch(() => {});
       }
     });
+  }
+
+  private async handleConfigCallback(query: TelegramBot.CallbackQuery, chatId: number) {
+    const data = query.data!;
+    const parts = data.split(':');
+    const action = parts[1]; // toggle, set, refresh
+    const key = parts[2];
+
+    const envPath = require('path').join(process.cwd(), '.env');
+    let envContent = await fs.promises.readFile(envPath, 'utf8');
+
+    if (action === 'refresh') {
+      await this.sendConfigMenu(chatId, query.message?.message_id);
+      await this.bot.answerCallbackQuery(query.id);
+      return;
+    }
+
+    if (action === 'toggle') {
+      let isTrue = false;
+      let envKey = '';
+      if (key === 'reasoning') {
+        isTrue = !config.SHOW_REASONING;
+        envKey = 'SHOW_REASONING';
+        config.SHOW_REASONING = isTrue;
+      } else if (key === 'loop_limit') {
+        isTrue = config.DISABLE_LOOP_LIMIT; // toggling DISABLE_LOOP_LIMIT (true means limit is OFF, so if we toggle LOOP_LIMIT ON, disable becomes false)
+        envKey = 'DISABLE_LOOP_LIMIT';
+        config.DISABLE_LOOP_LIMIT = !isTrue;
+      } else if (key === 'whisper_enabled') {
+        isTrue = !config.WHISPER_ENABLED;
+        envKey = 'WHISPER_ENABLED';
+        config.WHISPER_ENABLED = isTrue;
+      }
+      
+      const writeVal = envKey === 'DISABLE_LOOP_LIMIT' ? (!isTrue).toString() : isTrue.toString();
+      
+      if (!envContent.includes(envKey + '=')) {
+        envContent += `\n${envKey}=${writeVal}`;
+      } else {
+        const regex = new RegExp(`${envKey}=.*`);
+        envContent = envContent.replace(regex, `${envKey}=${writeVal}`);
+      }
+      await fs.promises.writeFile(envPath, envContent);
+      
+      await this.bot.answerCallbackQuery(query.id, { text: `✅ Изменено: ${key} = ${isTrue}` });
+      await this.sendConfigMenu(chatId, query.message?.message_id);
+    } else if (action === 'set') {
+      this.pendingConfigInput.set(chatId, key);
+      await this.bot.answerCallbackQuery(query.id);
+      
+      const promptMap: Record<string, string> = {
+        'max_context': '🧠 Введите новый лимит токенов контекста памяти (минимум 4000):',
+        'loops': '🛡 Введите максимальное количество шагов агента:',
+        'timeout': '⏳ Введите таймаут терминала в миллисекундах (например 30000):',
+        'whisper_model': '🎙 Введите модель Whisper (tiny, base, small, medium, large):'
+      };
+      
+      const promptText = promptMap[key] || `Введите новое значение для ${key}:`;
+      
+      await this.bot.sendMessage(chatId, `👇 *Ожидание ввода*\n────────────────────────\n${promptText}`, { 
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [[{ text: '❌ Отмена', callback_data: 'cfg:refresh' }]]
+        }
+      });
+    }
+  }
+
+  private async handlePendingConfigInput(chatId: number, text: string, key: string) {
+    this.pendingConfigInput.delete(chatId);
+    
+    const envPath = require('path').join(process.cwd(), '.env');
+    let envContent = await fs.promises.readFile(envPath, 'utf8');
+    const valStr = text.trim();
+    let successMsg = '';
+
+    if (key === 'loops') {
+      const num = parseInt(valStr, 10);
+      if (isNaN(num) || num <= 0) return this.bot.sendMessage(chatId, `❌ Неверное значение. Ожидается число > 0.`);
+      config.MAX_LOOPS = num;
+      envContent = this.updateEnv(envContent, 'MAX_LOOPS', num.toString());
+      successMsg = `MAX_LOOPS установлен на ${num}`;
+    } else if (key === 'max_context') {
+      const num = parseInt(valStr, 10);
+      if (isNaN(num) || num < 4000) return this.bot.sendMessage(chatId, `❌ Неверное значение. Ожидается число >= 4000.`);
+      config.MAX_CONTEXT_TOKENS = num;
+      envContent = this.updateEnv(envContent, 'MAX_CONTEXT_TOKENS', num.toString());
+      successMsg = `MAX_CONTEXT_TOKENS установлен на ${num}`;
+    } else if (key === 'timeout') {
+      const num = parseInt(valStr, 10);
+      if (isNaN(num) || num <= 0) return this.bot.sendMessage(chatId, `❌ Неверное значение. Ожидается число > 0.`);
+      config.MAX_EXECUTION_TIMEOUT_MS = num;
+      envContent = this.updateEnv(envContent, 'MAX_EXECUTION_TIMEOUT_MS', num.toString());
+      successMsg = `MAX_EXECUTION_TIMEOUT_MS установлен на ${num} мс`;
+    } else if (key === 'whisper_model') {
+      const allowed = ['tiny', 'base', 'small', 'medium', 'large'];
+      const v = valStr.toLowerCase();
+      if (!allowed.includes(v)) return this.bot.sendMessage(chatId, `❌ Неверная модель. Используйте: tiny, base, small, medium, large.`);
+      config.WHISPER_MODEL = v;
+      envContent = this.updateEnv(envContent, 'WHISPER_MODEL', v);
+      successMsg = `WHISPER_MODEL установлен на ${v}`;
+    }
+
+    await fs.promises.writeFile(envPath, envContent);
+    await this.bot.sendMessage(chatId, `✅ *Настройка сохранена*\n────────────────────────\n• ${successMsg}`, { parse_mode: 'Markdown' });
+    await this.sendConfigMenu(chatId);
+  }
+
+  private updateEnv(envContent: string, key: string, value: string): string {
+    if (!envContent.includes(key + '=')) {
+      return envContent + `\n${key}=${value}`;
+    } else {
+      const regex = new RegExp(`${key}=.*`);
+      return envContent.replace(regex, `${key}=${value}`);
+    }
+  }
+
+  private async sendConfigMenu(chatId: number, messageIdToEdit?: number) {
+    const cfgMsg = `⚙️ *Настройки Системы XaCode*\n`
+      + `━━━━━━━━━━━━━━━━━━━━━━━━\n`
+      + `_Нажмите на кнопку, чтобы изменить значение_\n`;
+
+    const inlineKeyboard = [
+      [{ text: `🧠 Токены памяти: ${config.MAX_CONTEXT_TOKENS}`, callback_data: 'cfg:set:max_context' }],
+      [{ text: `${config.SHOW_REASONING ? '🟢' : '🔴'} Показывать "мысли" ИИ`, callback_data: 'cfg:toggle:reasoning' }],
+      [{ text: `🛡 Шагов на задачу: ${config.MAX_LOOPS}`, callback_data: 'cfg:set:loops' }],
+      [{ text: `⏳ Таймаут терминала: ${config.MAX_EXECUTION_TIMEOUT_MS} мс`, callback_data: 'cfg:set:timeout' }],
+      [{ text: `${!config.DISABLE_LOOP_LIMIT ? '🟢' : '🔴'} Защита от зацикливания`, callback_data: 'cfg:toggle:loop_limit' }],
+      [{ text: `${config.WHISPER_ENABLED ? '🟢' : '🔴'} Голосовые (Whisper)`, callback_data: 'cfg:toggle:whisper_enabled' }],
+      [{ text: `🎙 Модель Whisper: ${config.WHISPER_MODEL}`, callback_data: 'cfg:set:whisper_model' }],
+      [{ text: '🔄 Обновить меню', callback_data: 'cfg:refresh' }]
+    ];
+
+    if (messageIdToEdit) {
+      try {
+        await this.bot.editMessageText(cfgMsg, {
+          chat_id: chatId,
+          message_id: messageIdToEdit,
+          parse_mode: 'Markdown',
+          reply_markup: { inline_keyboard: inlineKeyboard }
+        });
+      } catch (e: any) {
+        logger.warn(`Could not edit config menu: ${e.message}`);
+      }
+    } else {
+      await this.bot.sendMessage(chatId, cfgMsg, {
+        parse_mode: 'Markdown',
+        reply_markup: { inline_keyboard: inlineKeyboard }
+      });
+    }
   }
 
   private async handleCommand(chatId: number, text: string) {
@@ -389,144 +548,12 @@ export class BotService {
         const cfgSubcmd = text.split(' ')[1];
         const cfgValStr = text.split(' ')[2];
         if (cfgSubcmd && cfgValStr) {
-          const envPath = require('path').join(process.cwd(), '.env');
-          let envContent = await fs.promises.readFile(envPath, 'utf8');
-          
-          if (cfgSubcmd === 'loops') {
-            const num = parseInt(cfgValStr, 10);
-            if (!isNaN(num) && num > 0) {
-              if (!envContent.includes('MAX_LOOPS=')) {
-                envContent += `\nMAX_LOOPS=${num}`;
-              } else {
-                envContent = envContent.replace(/MAX_LOOPS=.*/, `MAX_LOOPS=${num}`);
-              }
-              config.MAX_LOOPS = num;
-              await fs.promises.writeFile(envPath, envContent);
-              await this.bot.sendMessage(chatId, `✅ *Configuration Updated*\n────────────────────────\n• *MAX_LOOPS* is now set to \`${num}\``, { parse_mode: 'Markdown' });
-            } else {
-              await this.bot.sendMessage(chatId, `❌ *Invalid Value:* Please specify a positive integer for loops.`, { parse_mode: 'Markdown' });
-            }
-          } else if (cfgSubcmd === 'max_context') {
-            const num = parseInt(cfgValStr, 10);
-            if (!isNaN(num) && num >= 4000) {
-              if (!envContent.includes('MAX_CONTEXT_TOKENS=')) {
-                envContent += `\nMAX_CONTEXT_TOKENS=${num}`;
-              } else {
-                envContent = envContent.replace(/MAX_CONTEXT_TOKENS=.*/, `MAX_CONTEXT_TOKENS=${num}`);
-              }
-              config.MAX_CONTEXT_TOKENS = num;
-              await fs.promises.writeFile(envPath, envContent);
-              await this.bot.sendMessage(chatId, `✅ *Configuration Updated*\n────────────────────────\n• *MAX_CONTEXT_TOKENS* is now set to \`${num}\``, { parse_mode: 'Markdown' });
-            } else {
-              await this.bot.sendMessage(chatId, `❌ *Invalid Value:* Please specify a positive integer >= 4000 for max context tokens.`, { parse_mode: 'Markdown' });
-            }
-          } else if (cfgSubcmd === 'timeout') {
-            const num = parseInt(cfgValStr, 10);
-            if (!isNaN(num) && num > 0) {
-              if (!envContent.includes('MAX_EXECUTION_TIMEOUT_MS=')) {
-                envContent += `\nMAX_EXECUTION_TIMEOUT_MS=${num}`;
-              } else {
-                envContent = envContent.replace(/MAX_EXECUTION_TIMEOUT_MS=.*/, `MAX_EXECUTION_TIMEOUT_MS=${num}`);
-              }
-              config.MAX_EXECUTION_TIMEOUT_MS = num;
-              await fs.promises.writeFile(envPath, envContent);
-              await this.bot.sendMessage(chatId, `✅ *Configuration Updated*\n────────────────────────\n• *MAX_EXECUTION_TIMEOUT_MS* is now set to \`${num}\` ms`, { parse_mode: 'Markdown' });
-            } else {
-              await this.bot.sendMessage(chatId, `❌ *Invalid Value:* Please specify a positive integer for timeout.`, { parse_mode: 'Markdown' });
-            }
-          } else if (cfgSubcmd === 'reasoning') {
-            const isTrue = cfgValStr.toLowerCase() === 'true' || cfgValStr === '1';
-            const isFalse = cfgValStr.toLowerCase() === 'false' || cfgValStr === '0';
-            if (isTrue || isFalse) {
-              const val = isTrue ? 'true' : 'false';
-              if (!envContent.includes('SHOW_REASONING=')) {
-                envContent += `\nSHOW_REASONING=${val}`;
-              } else {
-                envContent = envContent.replace(/SHOW_REASONING=.*/, `SHOW_REASONING=${val}`);
-              }
-              config.SHOW_REASONING = isTrue;
-              await fs.promises.writeFile(envPath, envContent);
-              await this.bot.sendMessage(chatId, `✅ *Configuration Updated*\n────────────────────────\n• *SHOW_REASONING* is now set to \`${val}\``, { parse_mode: 'Markdown' });
-            } else {
-              await this.bot.sendMessage(chatId, `❌ *Invalid Value:* Please specify \`true\` or \`false\`.`, { parse_mode: 'Markdown' });
-            }
-          } else if (cfgSubcmd === 'loop_limit') {
-            const isTrue = cfgValStr.toLowerCase() === 'true' || cfgValStr === 'on' || cfgValStr === '1';
-            const isFalse = cfgValStr.toLowerCase() === 'false' || cfgValStr === 'off' || cfgValStr === '0';
-            if (isTrue || isFalse) {
-              const val = isTrue ? 'true' : 'false';
-              const disableVal = isTrue ? 'false' : 'true';
-              if (!envContent.includes('DISABLE_LOOP_LIMIT=')) {
-                envContent += `\nDISABLE_LOOP_LIMIT=${disableVal}`;
-              } else {
-                envContent = envContent.replace(/DISABLE_LOOP_LIMIT=.*/, `DISABLE_LOOP_LIMIT=${disableVal}`);
-              }
-              config.DISABLE_LOOP_LIMIT = !isTrue;
-              await fs.promises.writeFile(envPath, envContent);
-              await this.bot.sendMessage(chatId, `✅ *Configuration Updated*\n────────────────────────\n• *LOOP_LIMIT* is now set to \`${val}\` (Limits: ${isTrue ? 'Enforced' : 'Bypassed'})`, { parse_mode: 'Markdown' });
-            } else {
-              await this.bot.sendMessage(chatId, `❌ *Invalid Value:* Please specify \`true\` or \`false\`.`, { parse_mode: 'Markdown' });
-            }
-          } else if (cfgSubcmd === 'whisper_enabled') {
-            const isTrue = cfgValStr.toLowerCase() === 'true' || cfgValStr === 'on' || cfgValStr === '1';
-            const isFalse = cfgValStr.toLowerCase() === 'false' || cfgValStr === 'off' || cfgValStr === '0';
-            if (isTrue || isFalse) {
-              const val = isTrue ? 'true' : 'false';
-              if (!envContent.includes('WHISPER_ENABLED=')) {
-                envContent += `\nWHISPER_ENABLED=${val}`;
-              } else {
-                envContent = envContent.replace(/WHISPER_ENABLED=.*/, `WHISPER_ENABLED=${val}`);
-              }
-              config.WHISPER_ENABLED = isTrue;
-              await fs.promises.writeFile(envPath, envContent);
-              await this.bot.sendMessage(chatId, `✅ *Configuration Updated*\n────────────────────────\n• *WHISPER_ENABLED* is now set to \`${val}\``, { parse_mode: 'Markdown' });
-            } else {
-              await this.bot.sendMessage(chatId, `❌ *Invalid Value:* Please specify \`true\` or \`false\`.`, { parse_mode: 'Markdown' });
-            }
-          } else if (cfgSubcmd === 'whisper_model') {
-            const allowedModels = ['tiny', 'base', 'small', 'medium', 'large'];
-            const val = cfgValStr.toLowerCase();
-            if (allowedModels.includes(val)) {
-              if (!envContent.includes('WHISPER_MODEL=')) {
-                envContent += `\nWHISPER_MODEL=${val}`;
-              } else {
-                envContent = envContent.replace(/WHISPER_MODEL=.*/, `WHISPER_MODEL=${val}`);
-              }
-              config.WHISPER_MODEL = val;
-              await fs.promises.writeFile(envPath, envContent);
-              await this.bot.sendMessage(chatId, `✅ *Configuration Updated*\n────────────────────────\n• *WHISPER_MODEL* is now set to \`${val}\` (CPU RAM usage: tiny: ~70MB, base: ~140MB, small: ~460MB)`, { parse_mode: 'Markdown' });
-            } else {
-              await this.bot.sendMessage(chatId, `❌ *Invalid Value:* Use one of: \`tiny\`, \`base\`, \`small\`, \`medium\`, \`large\`.`, { parse_mode: 'Markdown' });
-            }
-          } else {
-            await this.bot.sendMessage(chatId, `❌ *Unknown Parameter:* Use \`loops\`, \`timeout\`, \`reasoning\`, \`loop_limit\`, \`whisper_enabled\`, or \`whisper_model\`.`, { parse_mode: 'Markdown' });
-          }
+          // Keep old manual text commands for backward compatibility
+          await this.handlePendingConfigInput(chatId, cfgValStr, cfgSubcmd);
         } else {
-          const cfgMsg = `⚙️ *Настройки Системы XaCode*\n`
-            + `━━━━━━━━━━━━━━━━━━━━━━━━\n\n`
-            + `🧠 *Память и ИИ*\n`
-            + `🔹 \`MAX_CONTEXT_TOKENS\` : *${config.MAX_CONTEXT_TOKENS}*\n`
-            + `_Лимит токенов контекста памяти_\n`
-            + `🔹 \`SHOW_REASONING\` : *${config.SHOW_REASONING ? '🟢 Вкл' : '🔴 Выкл'}*\n`
-            + `_Показывать внутренние "мысли" агента_\n\n`
-            + `🛡 *Лимиты Выполнения*\n`
-            + `🔹 \`MAX_LOOPS\` : *${config.MAX_LOOPS}* шагов\n`
-            + `_Максимум действий на одну задачу_\n`
-            + `🔹 \`TIMEOUT_MS\` : *${config.MAX_EXECUTION_TIMEOUT_MS}* мс\n`
-            + `_Таймаут команд в терминале_\n`
-            + `🔹 \`LOOP_LIMIT\` : *${!config.DISABLE_LOOP_LIMIT ? '🟢 Безопасный' : '🔴 Без ограничений'}*\n`
-            + `_Защита от зацикливания агента_\n\n`
-            + `🎙 *Голосовое Управление (Whisper)*\n`
-            + `🔹 \`WHISPER_ENABLED\` : *${config.WHISPER_ENABLED ? '🟢 Вкл' : '🔴 Выкл'}*\n`
-            + `🔹 \`WHISPER_MODEL\` : *${config.WHISPER_MODEL}*\n\n`
-            + `━━━━━━━━━━━━━━━━━━━━━━━━\n`
-            + `📝 *Как изменить настройку?*\n`
-            + `Отправьте команду \`/config <параметр> <значение>\`\n`
-            + `_Примеры:_\n`
-            + `• \`/config max_context 64000\`\n`
-            + `• \`/config loops 50\`\n`
-            + `• \`/config reasoning true\``;
-          await this.bot.sendMessage(chatId, cfgMsg, { parse_mode: 'Markdown' });
+          // Clear any pending state if user just types /config
+          this.pendingConfigInput.delete(chatId);
+          await this.sendConfigMenu(chatId);
         }
         break;
       }
