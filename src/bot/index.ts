@@ -282,26 +282,26 @@ export class BotService {
       if (isNaN(num) || num <= 0) return this.bot.sendMessage(chatId, `❌ Неверное значение. Ожидается число > 0.`);
       config.MAX_LOOPS = num;
       envContent = this.updateEnv(envContent, 'MAX_LOOPS', num.toString());
-      successMsg = `MAX_LOOPS установлен на ${num}`;
+      successMsg = `\`MAX_LOOPS\` установлен на ${num}`;
     } else if (key === 'max_context') {
       const num = parseInt(valStr, 10);
       if (isNaN(num) || num < 4000) return this.bot.sendMessage(chatId, `❌ Неверное значение. Ожидается число >= 4000.`);
       config.MAX_CONTEXT_TOKENS = num;
       envContent = this.updateEnv(envContent, 'MAX_CONTEXT_TOKENS', num.toString());
-      successMsg = `MAX_CONTEXT_TOKENS установлен на ${num}`;
+      successMsg = `\`MAX_CONTEXT_TOKENS\` установлен на ${num}`;
     } else if (key === 'timeout') {
       const num = parseInt(valStr, 10);
       if (isNaN(num) || num <= 0) return this.bot.sendMessage(chatId, `❌ Неверное значение. Ожидается число > 0.`);
       config.MAX_EXECUTION_TIMEOUT_MS = num;
       envContent = this.updateEnv(envContent, 'MAX_EXECUTION_TIMEOUT_MS', num.toString());
-      successMsg = `MAX_EXECUTION_TIMEOUT_MS установлен на ${num} мс`;
+      successMsg = `\`MAX_EXECUTION_TIMEOUT_MS\` установлен на ${num} мс`;
     } else if (key === 'whisper_model') {
       const allowed = ['tiny', 'base', 'small', 'medium', 'large'];
       const v = valStr.toLowerCase();
       if (!allowed.includes(v)) return this.bot.sendMessage(chatId, `❌ Неверная модель. Используйте: tiny, base, small, medium, large.`);
       config.WHISPER_MODEL = v;
       envContent = this.updateEnv(envContent, 'WHISPER_MODEL', v);
-      successMsg = `WHISPER_MODEL установлен на ${v}`;
+      successMsg = `\`WHISPER_MODEL\` установлен на ${v}`;
     }
 
     await fs.promises.writeFile(envPath, envContent);
