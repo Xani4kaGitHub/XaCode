@@ -49,7 +49,12 @@ export class BotService {
       }
 
       if (pendingCfgKey && !text.startsWith('/')) {
-        await this.handlePendingConfigInput(chatId, userId, text, pendingCfgKey);
+        try {
+          await this.handlePendingConfigInput(chatId, userId, text, pendingCfgKey);
+        } catch (e: any) {
+          logger.error(`Error in handlePendingConfigInput: ${e.message}`);
+          await this.bot.sendMessage(chatId, `❌ Сталася помилка під час збереження налаштувань: ${e.message}`);
+        }
         return;
       }
 
