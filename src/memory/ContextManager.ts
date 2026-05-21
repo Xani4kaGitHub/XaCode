@@ -15,7 +15,7 @@ export class ContextManager {
 
   constructor() {
     this.config = {
-      maxContextTokens: appConfig.MAX_CONTEXT_TOKENS || 32000,
+      maxContextTokens: 32000, // Fallback, we will use appConfig directly
       compressionThresholdPercent: 0.85,
       summaryMaxTokens: 2000,
     };
@@ -61,10 +61,11 @@ export class ContextManager {
 
   private async checkAndCompress() {
     const currentTokens = this.getCurrentTokenUsage();
-    const threshold = this.config.maxContextTokens * this.config.compressionThresholdPercent;
+    const maxTokens = appConfig.MAX_CONTEXT_TOKENS || 32000;
+    const threshold = maxTokens * this.config.compressionThresholdPercent;
 
     if (currentTokens > threshold) {
-      logger.warn(`Context window at ${Math.round((currentTokens / this.config.maxContextTokens) * 100)}%. Triggering compression.`);
+      logger.warn(`Context window at ${Math.round((currentTokens / maxTokens) * 100)}%. Triggering compression.`);
       await this.compressMemory();
     }
   }
@@ -121,7 +122,7 @@ Make it concise. Previous summary: ${this.summarizedMemory}`;
   getMemoryStats() {
     return {
       usageTokens: this.getCurrentTokenUsage(),
-      maxTokens: this.config.maxContextTokens,
+      maxTokens: appConfig.MAX_CONTEXT_TOKENS || 32000,
       historyLength: this.shortTermHistory.length,
       hasSummary: !!this.summarizedMemory
     };
