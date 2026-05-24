@@ -17,6 +17,7 @@ export interface Config {
   DISABLE_LOOP_LIMIT: boolean;
   WHISPER_ENABLED: boolean;
   WHISPER_MODEL: string;
+  ALWAYS_FULL_ACCESS: boolean;
 }
 
 export const config: Config = {
@@ -32,6 +33,7 @@ export const config: Config = {
   DISABLE_LOOP_LIMIT: process.env.DISABLE_LOOP_LIMIT === 'true',
   WHISPER_ENABLED: process.env.WHISPER_ENABLED === 'true',
   WHISPER_MODEL: process.env.WHISPER_MODEL || 'tiny',
+  ALWAYS_FULL_ACCESS: process.env.ALWAYS_FULL_ACCESS === 'true',
 };
 
 export function validateConfig() {

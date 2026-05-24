@@ -221,6 +221,10 @@ export class BotService {
         isTrue = !config.WHISPER_ENABLED;
         envKey = 'WHISPER_ENABLED';
         config.WHISPER_ENABLED = isTrue;
+      } else if (key === 'always_full_access') {
+        isTrue = !config.ALWAYS_FULL_ACCESS;
+        envKey = 'ALWAYS_FULL_ACCESS';
+        config.ALWAYS_FULL_ACCESS = isTrue;
       }
       
       const writeVal = envKey === 'DISABLE_LOOP_LIMIT' ? (!isTrue).toString() : isTrue.toString();
@@ -329,6 +333,7 @@ export class BotService {
       [{ text: `🛡 Шагов на задачу: ${config.MAX_LOOPS}`, callback_data: 'cfg:set:loops' }],
       [{ text: `⏳ Таймаут терминала: ${config.MAX_EXECUTION_TIMEOUT_MS} мс`, callback_data: 'cfg:set:timeout' }],
       [{ text: `${!config.DISABLE_LOOP_LIMIT ? '🟢' : '🔴'} Защита от зацикливания`, callback_data: 'cfg:toggle:loop_limit' }],
+      [{ text: `${!config.ALWAYS_FULL_ACCESS ? '🟢' : '🔴'} Режим Песочницы (Sandbox)`, callback_data: 'cfg:toggle:always_full_access' }],
       [{ text: `${config.WHISPER_ENABLED ? '🟢' : '🔴'} Голосовые (Whisper)`, callback_data: 'cfg:toggle:whisper_enabled' }],
       [{ text: `🎙 Модель Whisper: ${config.WHISPER_MODEL}`, callback_data: 'cfg:set:whisper_model' }],
       [{ text: '🔄 Обновить меню', callback_data: 'cfg:refresh' }]
@@ -403,13 +408,60 @@ export class BotService {
         const st = statusMap[ctx.status] || ctx.status;
         const taskText = ctx.originalRequest ? (ctx.originalRequest.length > 40 ? ctx.originalRequest.substring(0, 40) + '...' : ctx.originalRequest) : 'Нет активной задачи';
 
-        const statusMsg = `📊 *Статус Агента*\n`
+        const os = require('os');
+        const cp = require('child_process');
+        
+        const formatUptime = (seconds: number) => {
+          const d = Math.floor(seconds / (3600*24));
+          const h = Math.floor(seconds % (3600*24) / 3600);
+          const m = Math.floor(seconds % 3600 / 60);
+          return `${d}d ${h}h ${m}m`;
+        };
+
+        const cpus = os.cpus();
+        const cpuModel = cpus.length > 0 ? cpus[0].model.trim() : 'Unknown';
+        const loadAvg = os.loadavg().map((l: number) => l.toFixed(2)).join(', ');
+        const totalMem = (os.totalmem() / (1024 ** 3)).toFixed(1);
+        const freeMem = (os.freemem() / (1024 ** 3)).toFixed(1);
+        const usedMem = (parseFloat(totalMem) - parseFloat(freeMem)).toFixed(1);
+        const sysUptime = formatUptime(os.uptime());
+        const botUptime = formatUptime(process.uptime());
+
+        let diskInfo = 'N/A';
+        try {
+          if (os.platform() === 'linux' || os.platform() === 'darwin') {
+             const df = cp.execSync('df -h /').toString().split('\\n')[1].trim().replace(/\\s+/g, ' ').split(' ');
+             diskInfo = `${df[2]} / ${df[1]} (${df[4]})`;
+          } else if (os.platform() === 'win32') {
+             const diskOut = cp.execSync('wmic logicaldisk get size,freespace,caption').toString().split('\\n');
+             for (const line of diskOut) {
+                if (line.includes('C:')) {
+                   const parts = line.trim().replace(/\\s+/g, ' ').split(' ');
+                   const free = (parseInt(parts[1]) / (1024**3)).toFixed(1);
+                   const total = (parseInt(parts[2]) / (1024**3)).toFixed(1);
+                   const used = (parseFloat(total) - parseFloat(free)).toFixed(1);
+                   diskInfo = `${used}G / ${total}G (${Math.round((parseFloat(used)/parseFloat(total))*100)}%)`;
+                   break;
+                }
+             }
+          }
+        } catch(e) {}
+
+        const statusMsg = `📊 *Агент XaCode*\n`
           + `────────────────────────\n`
           + `• *Состояние:* ${st} \`[${agentState}]\`\n`
           + `• *Задача:* \`${taskText}\`\n`
           + `• *Этап:* _${ctx.currentStep || 'Ожидание задачи...'}_\n`
-          + `• *Использование памяти:* \`${memStats.usageTokens} / ${memStats.maxTokens}\` токенов\n`
-          + `• *Изменено файлов:* *${ctx.filesModified.length}*`;
+          + `• *Токены памяти:* \`${memStats.usageTokens} / ${memStats.maxTokens}\`\n\n`
+          + `💻 *Системный Дашборд (VPS)*\n`
+          + `────────────────────────\n`
+          + `• *CPU:* \`${cpus.length}x ${cpuModel}\`\n`
+          + `• *Load Avg:* \`${loadAvg}\`\n`
+          + `• *RAM:* \`${usedMem} GB / ${totalMem} GB\`\n`
+          + `• *Disk (Root):* \`${diskInfo}\`\n`
+          + `• *Node.js:* \`${process.version}\`\n`
+          + `• *Uptime (Система):* \`${sysUptime}\`\n`
+          + `• *Uptime (Бот):* \`${botUptime}\``;
 
         await this.bot.sendMessage(chatId, statusMsg, { parse_mode: 'Markdown' });
         break;

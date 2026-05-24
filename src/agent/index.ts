@@ -4,7 +4,9 @@ import { toolDefinitions, executeTool } from '../tools';
 import { logger } from '../logger';
 import { llmProvider } from '../llm/Provider';
 import { StateMachine, AgentState } from './StateMachine';
+import { terminalManager } from '../terminal';
 import { metricsTracker } from '../metrics/MetricsTracker';
+import { permissionSystem } from '../security/PermissionSystem';
 
 export class AgentSession {
   public chatId: number;
@@ -55,7 +57,11 @@ CRITICAL RULES:
       this.memoryManager.resetSession(systemPrompt, toolDefinitions as any);
     }
     
-    this.memoryManager.addMessage({ role: 'user', content: task });
+    const accessText = permissionSystem.isFullAccess() ?
+      "\n\n[SYSTEM NOTIFICATION]: You currently have FULL FILESYSTEM ACCESS. You are NOT restricted to the sandbox." :
+      "\n\n[SYSTEM NOTIFICATION]: You are currently RESTRICTED to the 'sandbox/' directory. Do NOT attempt to read/write outside it.";
+
+    this.memoryManager.addMessage({ role: 'user', content: task + accessText });
 
     const startMetrics = metricsTracker.getMetrics();
 

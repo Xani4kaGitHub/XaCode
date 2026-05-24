@@ -1,4 +1,5 @@
 import { eventBus, EVENTS } from '../events/EventBus';
+import { config } from '../config';
 import { logger } from '../logger';
 
 export enum RiskLevel {
@@ -38,6 +39,7 @@ export class PermissionSystem {
   }
 
   isFullAccess(): boolean {
+    if (config.ALWAYS_FULL_ACCESS) return true;
     return this.fullAccessEnabled;
   }
 
