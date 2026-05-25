@@ -12,10 +12,12 @@
     "dev": "tsx src/index.ts"
   },
   "dependencies": {
+    "@types/minimatch": "^5.1.2",
+    "cross-spawn": "^7.0.3",
     "dotenv": "^16.4.5",
+    "minimatch": "^10.2.5",
     "node-telegram-bot-api": "^0.65.0",
-    "openai": "^4.28.0",
-    "cross-spawn": "^7.0.3"
+    "openai": "^4.28.0"
   },
   "devDependencies": {
     "@types/cross-spawn": "^6.0.6",

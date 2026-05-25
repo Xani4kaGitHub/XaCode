@@ -3,7 +3,7 @@ import path from 'path';
 import { securityManager } from '../security';
 import { permissionSystem } from '../security/PermissionSystem';
 import { logger } from '../logger';
-import minimatch from 'minimatch';
+import { minimatch } from 'minimatch';
 
 function checkPathAccess(resolvedPath: string) {
   if (!permissionSystem.isFullAccess() && !securityManager.isPathAllowed(resolvedPath)) {
@@ -76,51 +76,55 @@ export async function listDirectory(targetPath: string): Promise<string[]> {
  * Returns an array of file paths where the pattern is found.
  */
 
-+
-+/**
-+ * Internal helper to recursively walk directories with permission checks.
-+ */
-+async function walkWithCheck(dir: string, fileHandler: (fullPath: string) => Promise<void>) {
-+  checkPathAccess(path.resolve(dir));
-+  const entries = await fs.readdir(dir, { withFileTypes: true });
-+  for (const entry of entries) {
-+    const fullPath = path.resolve(dir, entry.name);
-+    if (entry.isDirectory()) {
-+      await walkWithCheck(fullPath, fileHandler);
-+    } else if (entry.isFile()) {
-+      await fileHandler(fullPath);
-+    }
-+  }
-+}
-+
-+// Updated searchCode implementation using walkWithCheck
-+export async function searchCode(pattern: string, basePath: string = '.'): Promise<string[]> {
-+  const results: string[] = [];
-+  const regex = new RegExp(pattern, 'gm');
-+  await walkWithCheck(path.resolve(basePath), async (fullPath) => {
-+    try {
-+      const content = await fs.readFile(fullPath, 'utf8');
-+      if (regex.test(content)) {
-+        results.push(fullPath);
-+      }
-+    } catch (e) {
-+      // ignore errors
-+    }
-+  });
-+  return results;
-+}
-+
-+// Updated findFiles implementation using walkWithCheck
-+export async function findFiles(globPattern: string, basePath: string = '.'): Promise<string[]> {
-+  const matches: string[] = [];
-+  await walkWithCheck(path.resolve(basePath), async (fullPath) => {
-+    const relative = path.relative(basePath, fullPath).replace(/\\/g, '/');
-+    if (minimatch(relative, globPattern)) {
-+      matches.push(fullPath);
-+    }
-+  });
-+  return matches;
-+}
+
+/**
+ * Internal helper to recursively walk directories with permission checks.
+ */
+async function walkWithCheck(dir: string, fileHandler: (fullPath: string) => Promise<void>) {
+  checkPathAccess(path.resolve(dir));
+  const entries = await fs.readdir(dir, { withFileTypes: true });
+  for (const entry of entries) {
+    const fullPath = path.resolve(dir, entry.name);
+    if (entry.isDirectory()) {
+      await walkWithCheck(fullPath, fileHandler);
+    } else if (entry.isFile()) {
+      await fileHandler(fullPath);
+    }
+  }
+}
+
+/**
+ * Updated searchCode implementation using walkWithCheck
+ */
+export async function searchCode(pattern: string, basePath: string = '.'): Promise<string[]> {
+  const results: string[] = [];
+  const regex = new RegExp(pattern, 'gm');
+  await walkWithCheck(path.resolve(basePath), async (fullPath) => {
+    try {
+      const content = await fs.readFile(fullPath, 'utf8');
+      if (regex.test(content)) {
+        results.push(fullPath);
+      }
+    } catch (e) {
+      // ignore errors
+    }
+  });
+  return results;
+}
+
+/**
+ * Updated findFiles implementation using walkWithCheck
+ */
+export async function findFiles(globPattern: string, basePath: string = '.'): Promise<string[]> {
+  const matches: string[] = [];
+  await walkWithCheck(path.resolve(basePath), async (fullPath) => {
+    const relative = path.relative(basePath, fullPath).replace(/\\/g, '/');
+    if (minimatch(relative, globPattern)) {
+      matches.push(fullPath);
+    }
+  });
+  return matches;
+}
 
 /**
  * Batch read multiple files at once.
