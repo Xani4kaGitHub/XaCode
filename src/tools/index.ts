@@ -1,10 +1,11 @@
-import { readFile, writeFile, editFile, listDirectory, searchCode, findFiles, readFiles, runInBackground, getTaskOutput, deleteFile, fileInfo, manageBackgroundTask } from './fs';
+import { readFile, writeFile, editFile, listDirectory, searchCode, findFiles, readFiles, runInBackground, getTaskOutput, deleteFile, fileInfo, manageBackgroundTask, applyPatchToFile, renameFile, createDirectory } from './fs';
 import { terminalManager } from '../terminal';
 import { webSearch, readUrl } from './search';
 import { interactiveShell } from './shell';
 import { manageTodos } from './todos';
 import { askUserChoice, sendTelegramDocument } from '../events/interaction';
 import { httpRequest } from './http';
+import { readLints } from './lint';
 
 // Define the tools for DeepSeek (OpenAI compatible format)
 export const toolDefinitions = [
@@ -62,7 +63,8 @@ export const toolDefinitions = [
         type: 'object',
         properties: {
           command: { type: 'string', description: 'The bash command to execute' },
-          cwd: { type: 'string', description: 'Optional. The working directory' }
+          cwd: { type: 'string', description: 'Optional. The working directory' },
+          stdin: { type: 'string', description: 'Optional input to pipe via stdin' }
         },
         required: ['command']
       }
@@ -303,6 +305,62 @@ export const toolDefinitions = [
         required: ['action']
       }
     }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'apply_patch',
+      description: 'Apply a unified diff patch to a file.',
+      parameters: {
+        type: 'object',
+        properties: {
+          targetPath: { type: 'string', description: 'Path to the file to patch' },
+          patchString: { type: 'string', description: 'The unified diff patch string' }
+        },
+        required: ['targetPath', 'patchString']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'read_lints',
+      description: 'Run TypeScript compiler and return structured lint errors.',
+      parameters: {
+        type: 'object',
+        properties: {}
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'rename_file',
+      description: 'Rename or move a file/directory.',
+      parameters: {
+        type: 'object',
+        properties: {
+          from: { type: 'string', description: 'Source path' },
+          to: { type: 'string', description: 'Destination path' },
+          overwrite: { type: 'boolean', description: 'Whether to overwrite the destination if it exists' }
+        },
+        required: ['from', 'to']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'create_directory',
+      description: 'Create a directory recursively.',
+      parameters: {
+        type: 'object',
+        properties: {
+          targetPath: { type: 'string', description: 'Path to the new directory' }
+        },
+        required: ['targetPath']
+      }
+    }
   }
 ];
 
@@ -325,7 +383,7 @@ export async function executeTool(name: string, args: any, chatId?: number): Pro
         result = dir.join('\n');
         break;
       case 'run_command':
-        const termRes = await terminalManager.runCommand(args.command, args.cwd);
+        const termRes = await terminalManager.runCommand(args.command, args.cwd, args.stdin);
         result = `Exit Code: ${termRes.code}\nStdout:\n${termRes.stdout}\nStderr:\n${termRes.stderr}`;
         break;
       case 'search_code':
@@ -384,6 +442,18 @@ export async function executeTool(name: string, args: any, chatId?: number): Pro
         break;
       case 'manage_background_task':
         result = manageBackgroundTask(args.action, args.taskId);
+        break;
+      case 'apply_patch':
+        result = await applyPatchToFile(args.targetPath, args.patchString);
+        break;
+      case 'read_lints':
+        result = JSON.stringify(await readLints(), null, 2);
+        break;
+      case 'rename_file':
+        result = await renameFile(args.from, args.to, args.overwrite);
+        break;
+      case 'create_directory':
+        result = await createDirectory(args.targetPath);
         break;
       default:
         throw new Error(`Unknown tool: ${name}`);

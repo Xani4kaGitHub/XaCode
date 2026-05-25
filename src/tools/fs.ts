@@ -4,6 +4,7 @@ import { securityManager } from '../security';
 import { permissionSystem } from '../security/PermissionSystem';
 import { logger } from '../logger';
 import { minimatch } from 'minimatch';
+import { applyPatch } from 'diff';
 
 function checkPathAccess(resolvedPath: string) {
   if (!permissionSystem.isFullAccess() && !securityManager.isPathAllowed(resolvedPath)) {
@@ -247,4 +248,63 @@ export function manageBackgroundTask(action: 'list' | 'kill' | 'status', taskId?
   }
 
   return 'Unknown action.';
+}
+
+export async function applyPatchToFile(targetPath: string, patchString: string): Promise<string> {
+  const resolvedPath = path.resolve(targetPath);
+  checkPathAccess(resolvedPath);
+
+  const oldContent = await fs.readFile(resolvedPath, 'utf8');
+  // Handle carriage returns by normalizing before patching to avoid mismatch
+  const normalizedOld = oldContent.replace(/\r\n/g, '\n');
+  const normalizedPatch = patchString.replace(/\r\n/g, '\n');
+  
+  const result = applyPatch(normalizedOld, normalizedPatch);
+  if (result === false) {
+    throw new Error('Patch failed to apply — possible conflict. Ensure the patch context matches the file content.');
+  }
+
+  await fs.writeFile(resolvedPath, result, 'utf8');
+  logger.info(`Patch applied to: ${resolvedPath}`);
+  return `Patch successfully applied to ${resolvedPath}`;
+}
+
+export async function renameFile(from: string, to: string, overwrite: boolean = false): Promise<string> {
+  const resolvedFrom = path.resolve(from);
+  const resolvedTo = path.resolve(to);
+  checkPathAccess(resolvedFrom);
+  checkPathAccess(resolvedTo);
+
+  if (!overwrite) {
+    try {
+      await fs.access(resolvedTo);
+      throw new Error(`Target ${resolvedTo} already exists. Set overwrite: true to force.`);
+    } catch (e: any) {
+      if (e.code !== 'ENOENT') throw e;
+    }
+  }
+
+  await fs.mkdir(path.dirname(resolvedTo), { recursive: true });
+  try {
+    await fs.rename(resolvedFrom, resolvedTo);
+  } catch (e: any) {
+    if (e.code === 'EXDEV') {
+      // Fallback for cross-device link
+      await fs.copyFile(resolvedFrom, resolvedTo);
+      await fs.unlink(resolvedFrom);
+    } else {
+      throw e;
+    }
+  }
+  logger.info(`Renamed ${resolvedFrom} to ${resolvedTo}`);
+  return `Renamed ${resolvedFrom} → ${resolvedTo}`;
+}
+
+export async function createDirectory(targetPath: string): Promise<string> {
+  const resolvedPath = path.resolve(targetPath);
+  checkPathAccess(resolvedPath);
+  
+  await fs.mkdir(resolvedPath, { recursive: true });
+  logger.info(`Directory created: ${resolvedPath}`);
+  return `Directory ${resolvedPath} created (or already exists).`;
 }

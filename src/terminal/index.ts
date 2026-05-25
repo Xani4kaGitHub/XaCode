@@ -14,7 +14,7 @@ export class TerminalManager {
   /**
    * Executes a command with a timeout and returns its output.
    */
-  async runCommand(command: string, cwd: string = config.SANDBOX_DIR): Promise<{ stdout: string, stderr: string, code: number }> {
+  async runCommand(command: string, cwd: string = config.SANDBOX_DIR, stdin?: string): Promise<{ stdout: string, stderr: string, code: number }> {
     if (!permissionSystem.canExecute(command)) {
       throw new Error(`Command rejected by Permission System: ${command}. Type /fullaccess enable to run dangerous commands.`);
     }
@@ -40,6 +40,11 @@ export class TerminalManager {
       const child = spawn(shell, shellArgs, { cwd, detached: !isWin });
       const processId = child.pid?.toString() || Math.random().toString();
       this.activeProcesses.set(processId, child);
+
+      if (stdin) {
+        child.stdin.write(stdin);
+        child.stdin.end();
+      }
 
       let stdout = '';
       let stderr = '';
