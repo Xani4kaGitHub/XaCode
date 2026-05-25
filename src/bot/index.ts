@@ -318,6 +318,10 @@ export class BotService {
         isTrue = !config.ALWAYS_FULL_ACCESS;
         envKey = 'ALWAYS_FULL_ACCESS';
         config.ALWAYS_FULL_ACCESS = isTrue;
+      } else if (key === 'smart_memory_mode') {
+        isTrue = !config.SMART_MEMORY_MODE;
+        envKey = 'SMART_MEMORY_MODE';
+        config.SMART_MEMORY_MODE = isTrue;
       }
       
       const writeVal = envKey === 'DISABLE_LOOP_LIMIT' ? (!isTrue).toString() : isTrue.toString();
@@ -429,6 +433,7 @@ export class BotService {
       [{ text: `${!config.ALWAYS_FULL_ACCESS ? '🟢' : '🔴'} Режим Песочницы (Sandbox)`, callback_data: 'cfg:toggle:always_full_access' }],
       [{ text: `${config.WHISPER_ENABLED ? '🟢' : '🔴'} Голосовые (Whisper)`, callback_data: 'cfg:toggle:whisper_enabled' }],
       [{ text: `🎙 Модель Whisper: ${config.WHISPER_MODEL}`, callback_data: 'cfg:set:whisper_model' }],
+      [{ text: `${config.SMART_MEMORY_MODE ? '🟢' : '🔴'} Розумне вікно пам'яті`, callback_data: 'cfg:toggle:smart_memory_mode' }],
       [{ text: '🔄 Обновить меню', callback_data: 'cfg:refresh' }]
     ];
 
