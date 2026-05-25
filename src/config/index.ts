@@ -18,6 +18,8 @@ export interface Config {
   WHISPER_ENABLED: boolean;
   WHISPER_MODEL: string;
   ALWAYS_FULL_ACCESS: boolean;
+  PASTE_LOGS_ENABLED: boolean;
+  PASTE_LOGS_EXPIRY_MINUTES: number;
 }
 
 export const config: Config = {
@@ -34,6 +36,8 @@ export const config: Config = {
   WHISPER_ENABLED: process.env.WHISPER_ENABLED === 'true',
   WHISPER_MODEL: process.env.WHISPER_MODEL || 'tiny',
   ALWAYS_FULL_ACCESS: process.env.ALWAYS_FULL_ACCESS === 'true',
+  PASTE_LOGS_ENABLED: process.env.PASTE_LOGS_ENABLED !== 'false', // default true
+  PASTE_LOGS_EXPIRY_MINUTES: parseInt(process.env.PASTE_LOGS_EXPIRY_MINUTES || '10', 10),
 };
 
 export function validateConfig() {

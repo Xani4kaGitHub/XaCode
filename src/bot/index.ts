@@ -8,6 +8,7 @@ import { terminalManager } from '../terminal';
 import { logger } from '../logger';
 import { permissionSystem } from '../security/PermissionSystem';
 import { interactionEmitter } from '../events/interaction';
+import { pastieManager } from '../utils/pastie';
 
 export class BotService {
   private bot: TelegramBot;
@@ -77,6 +78,27 @@ export class BotService {
         return;
       }
 
+      if (text === '/pastes') {
+        const pastes = pastieManager.getActivePastes();
+        if (pastes.length === 0) {
+          return this.bot.sendMessage(chatId, '📭 No active pastes right now.');
+        }
+
+        let msg = '📜 *Active Session Logs:*\n\n';
+        for (const p of pastes) {
+          const minutesLeft = Math.max(0, Math.round((p.expiresAt - Date.now()) / 60000));
+          msg += `• Task: \`${p.taskId}\`\n  URL: ${p.url}\n  Expires in: ${minutesLeft} mins\n\n`;
+        }
+
+        const keyboard = {
+          inline_keyboard: pastes.map(p => ([
+            { text: `🗑 Delete ${p.taskId.substring(0, 15)}...`, callback_data: `delpaste_${p.url}` }
+          ]))
+        };
+
+        return this.bot.sendMessage(chatId, msg, { parse_mode: 'Markdown', reply_markup: keyboard, disable_web_page_preview: true });
+      }
+
       // Handle Commands
       if (text.startsWith('/')) {
         await this.handleCommand(chatId, userId, text);
@@ -113,6 +135,36 @@ export class BotService {
         }
 
         logger.info('User allowed, processing callback...');
+
+        if (query.data.startsWith('delpaste_')) {
+          const url = query.data.replace('delpaste_', '');
+          const success = await pastieManager.removePaste(url);
+          
+          if (success) {
+            await this.bot.answerCallbackQuery(query.id, { text: '✅ Paste deleted early!' });
+          } else {
+            await this.bot.answerCallbackQuery(query.id, { text: '❌ Failed or already deleted.' });
+          }
+          
+          // Refresh message
+          const pastes = pastieManager.getActivePastes();
+          if (pastes.length === 0) {
+            await this.bot.editMessageText('📭 No active pastes right now.', { chat_id: chatId, message_id: query.message.message_id });
+          } else {
+            let msg = '📜 *Active Session Logs:*\n\n';
+            for (const p of pastes) {
+              const minutesLeft = Math.max(0, Math.round((p.expiresAt - Date.now()) / 60000));
+              msg += `• Task: \`${p.taskId}\`\n  URL: ${p.url}\n  Expires in: ${minutesLeft} mins\n\n`;
+            }
+            const keyboard = {
+              inline_keyboard: pastes.map(p => ([
+                { text: `🗑 Delete ${p.taskId.substring(0, 15)}...`, callback_data: `delpaste_${p.url}` }
+              ]))
+            };
+            await this.bot.editMessageText(msg, { chat_id: chatId, message_id: query.message.message_id, parse_mode: 'Markdown', reply_markup: keyboard, disable_web_page_preview: true });
+          }
+          return;
+        }
 
         if (query.data.startsWith('cfg:')) {
           await this.handleConfigCallback(query, chatId, userId);

@@ -7,6 +7,7 @@ import { StateMachine, AgentState } from './StateMachine';
 import { terminalManager } from '../terminal';
 import { metricsTracker } from '../metrics/MetricsTracker';
 import { permissionSystem } from '../security/PermissionSystem';
+import { pastieManager } from '../utils/pastie';
 
 export class AgentSession {
   public chatId: number;
@@ -68,12 +69,24 @@ RULES:
       const remainingTokens = memoryStats.maxTokens - memoryStats.usageTokens;
       const percentUsed = Math.round((memoryStats.usageTokens / memoryStats.maxTokens) * 100);
       
+      let pastieLink = '';
+      if (config.PASTE_LOGS_ENABLED) {
+        try {
+          const history = this.memoryManager.getHistory();
+          const logText = history.map(m => `[${m.role.toUpperCase()}]\n${m.content}`).join('\n\n----------------------------------------\n\n');
+          pastieLink = await pastieManager.uploadLog(task.substring(0, 50), logText);
+        } catch (err: any) {
+          pastieLink = `Error: ${err.message}`;
+        }
+      }
+
       const statsMsg = `📊 *Task Execution Metrics:*\n`
         + `────────────────────────\n`
         + `• *Tokens Spent (this run):* \`${tokensSpent.toLocaleString()}\`\n`
         + `• *Estimated Cost:* \`$${costSpent.toFixed(4)}\`\n`
         + `• *Context Usage:* \`${memoryStats.usageTokens} / ${memoryStats.maxTokens}\` tokens (${percentUsed}%)\n`
-        + `• *Context Remaining:* \`${remainingTokens.toLocaleString()}\` tokens`;
+        + `• *Context Remaining:* \`${remainingTokens.toLocaleString()}\` tokens\n`
+        + (config.PASTE_LOGS_ENABLED ? `• *Session Log:* ${pastieLink}` : '');
       
       await statusCallback(statsMsg);
     } catch (e: any) {
