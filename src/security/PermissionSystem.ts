@@ -51,6 +51,7 @@ export class PermissionSystem {
   }
 
   getFullAccessRemainingMinutes(): number {
+    if (config.ALWAYS_FULL_ACCESS) return Infinity;
     if (!this.fullAccessEnabled) return 0;
     const remaining = this.fullAccessExpiry - Date.now();
     return Math.max(0, Math.round(remaining / 1000 / 60));
@@ -85,12 +86,12 @@ export class PermissionSystem {
       return false;
     }
 
-    if (risk === RiskLevel.DANGEROUS && !this.fullAccessEnabled) {
+    if (risk === RiskLevel.DANGEROUS && !this.isFullAccess()) {
       logger.warn(`Rejected DANGEROUS command (Full Access required): ${command}`);
       return false;
     }
 
-    if (risk === RiskLevel.DANGEROUS && this.fullAccessEnabled) {
+    if (risk === RiskLevel.DANGEROUS && this.isFullAccess()) {
       // Extensive audit logging for privileged actions
       logger.warn(`[AUDIT] EXECUTING DANGEROUS COMMAND: ${command}`);
     }
