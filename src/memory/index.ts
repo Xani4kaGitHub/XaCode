@@ -49,15 +49,16 @@ export class MemoryManager {
     this.contextManager.addMessage(message);
   }
 
-  async ensureCompressed() {
-    await this.contextManager.ensureCompressed();
-  }
-
-  getHistory(): ChatMessage[] {
+  getMessagesForLLM(): ChatMessage[] {
     return this.contextManager.getMessagesForLLM();
   }
 
+  getHistory(): ChatMessage[] {
+    return this.contextManager.getFullHistory();
+  }
+
   setTask(request: string) {
+    this.contextManager.setTask(request);
     this.taskContext.originalRequest = request;
     this.taskContext.status = 'running';
     this.taskContext.currentStep = 'Analyzing task';
