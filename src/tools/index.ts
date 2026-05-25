@@ -1,5 +1,9 @@
-import { readFile, writeFile, editFile, listDirectory } from './fs';
+import { readFile, writeFile, editFile, listDirectory, searchCode, findFiles, readFiles, runInBackground, getTaskOutput } from './fs';
 import { terminalManager } from '../terminal';
+import { webSearch } from './search';
+import { interactiveShell } from './shell';
+import { manageTodos } from './todos';
+import { askUserChoice } from '../events/interaction';
 
 // Define the tools for DeepSeek (OpenAI compatible format)
 export const toolDefinitions = [
@@ -76,11 +80,143 @@ export const toolDefinitions = [
         required: ['targetPath']
       }
     }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'search_code',
+      description: 'Search for a regex pattern within files.',
+      parameters: {
+        type: 'object',
+        properties: {
+          pattern: { type: 'string', description: 'Regex pattern to search' },
+          basePath: { type: 'string', description: 'Optional path to search in (default is current)' }
+        },
+        required: ['pattern']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'find_files',
+      description: 'Find files by glob pattern.',
+      parameters: {
+        type: 'object',
+        properties: {
+          globPattern: { type: 'string', description: 'Glob pattern like src/**/*.ts' },
+          basePath: { type: 'string', description: 'Optional base path' }
+        },
+        required: ['globPattern']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'read_files',
+      description: 'Read contents of multiple files at once.',
+      parameters: {
+        type: 'object',
+        properties: {
+          paths: { type: 'array', items: { type: 'string' }, description: 'Array of file paths' }
+        },
+        required: ['paths']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'run_in_background',
+      description: 'Run a shell command in the background.',
+      parameters: {
+        type: 'object',
+        properties: {
+          command: { type: 'string', description: 'Command to run' },
+          cwd: { type: 'string', description: 'Optional working directory' }
+        },
+        required: ['command']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_task_output',
+      description: 'Get the stdout and stderr of a background task.',
+      parameters: {
+        type: 'object',
+        properties: {
+          taskId: { type: 'string', description: 'The task ID' }
+        },
+        required: ['taskId']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'web_search',
+      description: 'Search the web using DuckDuckGo.',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'Search query' }
+        },
+        required: ['query']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'interactive_shell',
+      description: 'Run commands in a persistent stateful shell session.',
+      parameters: {
+        type: 'object',
+        properties: {
+          sessionId: { type: 'string', description: 'Session ID (null for a new session)' },
+          command: { type: 'string', description: 'Command to execute in the session' }
+        },
+        required: ['command']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'manage_todos',
+      description: 'Manage a persistent todo list for the agent.',
+      parameters: {
+        type: 'object',
+        properties: {
+          action: { type: 'string', enum: ['add', 'list', 'complete', 'delete'], description: 'Action to perform' },
+          textOrId: { type: 'string', description: 'Text of todo for "add", or ID for "complete"/"delete"' }
+        },
+        required: ['action']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'ask_user_choice',
+      description: 'Ask the user a multiple choice question and wait for their response.',
+      parameters: {
+        type: 'object',
+        properties: {
+          question: { type: 'string', description: 'The question to ask' },
+          options: { type: 'array', items: { type: 'string' }, description: 'Array of choices/buttons' }
+        },
+        required: ['question', 'options']
+      }
+    }
   }
 ];
 
 // Execute the tool based on the name and arguments
-export async function executeTool(name: string, args: any): Promise<string> {
+export async function executeTool(name: string, args: any, chatId?: number): Promise<string> {
   let result = '';
   try {
     switch (name) {
@@ -100,6 +236,43 @@ export async function executeTool(name: string, args: any): Promise<string> {
       case 'run_command':
         const termRes = await terminalManager.runCommand(args.command, args.cwd);
         result = `Exit Code: ${termRes.code}\nStdout:\n${termRes.stdout}\nStderr:\n${termRes.stderr}`;
+        break;
+      case 'search_code':
+        const searchMatches = await searchCode(args.pattern, args.basePath);
+        result = searchMatches.length > 0 ? searchMatches.join('\n') : 'No matches found.';
+        break;
+      case 'find_files':
+        const globMatches = await findFiles(args.globPattern, args.basePath);
+        result = globMatches.length > 0 ? globMatches.join('\n') : 'No files found.';
+        break;
+      case 'read_files':
+        const fileContents = await readFiles(args.paths);
+        result = args.paths.map((p: string, i: number) => `--- ${p} ---\n${fileContents[i]}\n`).join('\n');
+        break;
+      case 'run_in_background':
+        const taskId = runInBackground(args.command, args.cwd);
+        result = `Background task started with ID: ${taskId}`;
+        break;
+      case 'get_task_output':
+        const taskOut = getTaskOutput(args.taskId);
+        if (taskOut) {
+          result = `Stdout:\n${taskOut.stdout}\n\nStderr:\n${taskOut.stderr}`;
+        } else {
+          result = `Error: Task ID ${args.taskId} not found.`;
+        }
+        break;
+      case 'web_search':
+        result = await webSearch(args.query);
+        break;
+      case 'interactive_shell':
+        result = await interactiveShell(args.sessionId || null, args.command);
+        break;
+      case 'manage_todos':
+        result = await manageTodos(args.action, args.textOrId);
+        break;
+      case 'ask_user_choice':
+        if (!chatId) throw new Error('chatId is required for interactive user choice');
+        result = await askUserChoice(chatId, args.question, args.options);
         break;
       default:
         throw new Error(`Unknown tool: ${name}`);

@@ -7,6 +7,7 @@ import { agentOrchestrator } from '../agent';
 import { terminalManager } from '../terminal';
 import { logger } from '../logger';
 import { permissionSystem } from '../security/PermissionSystem';
+import { interactionEmitter } from '../events/interaction';
 
 export class BotService {
   private bot: TelegramBot;
@@ -19,6 +20,16 @@ export class BotService {
   }
 
   private setupListeners() {
+    interactionEmitter.on('ask_choice', async ({ chatId, requestId, question, options }) => {
+      const inlineKeyboard = options.map((opt: string, i: number) => [
+        { text: opt, callback_data: `choice:${requestId}:${i}` }
+      ]);
+      await this.bot.sendMessage(chatId, `❓ *Agent asks:*\n${question}`, {
+        parse_mode: 'Markdown',
+        reply_markup: { inline_keyboard: inlineKeyboard }
+      });
+    });
+
     this.bot.on('message', async (msg) => {
       const chatId = msg.chat.id;
       const userId = msg.from?.id;
@@ -178,6 +189,28 @@ export class BotService {
           } catch (e: any) {
             logger.error(`Ignored edit error: ${e.message}`);
           }
+        } else if (query.data.startsWith('choice:')) {
+          const parts = query.data.split(':');
+          const requestId = parts[1];
+          const choiceIndex = parseInt(parts[2], 10);
+          
+          // Try to get text of the choice from the message's keyboard
+          let chosenText = `Option ${choiceIndex + 1}`;
+          if (query.message?.reply_markup?.inline_keyboard) {
+            const row = query.message.reply_markup.inline_keyboard[choiceIndex];
+            if (row && row[0]) chosenText = row[0].text;
+          }
+          
+          interactionEmitter.emit(`choice_response_${requestId}`, chosenText);
+          
+          await this.bot.answerCallbackQuery(query.id, { text: `✅ Selected: ${chosenText}` });
+          try {
+            await this.bot.editMessageText(`❓ *Agent asks:*\n_${query.message?.text?.replace('❓ Agent asks:\\n', '')}_\n\n✅ *User selected:* ${chosenText}`, {
+              chat_id: chatId,
+              message_id: query.message?.message_id,
+              parse_mode: 'Markdown'
+            });
+          } catch (e) {}
         } else {
           logger.warn(`Unknown callback data: ${query.data}`);
         }

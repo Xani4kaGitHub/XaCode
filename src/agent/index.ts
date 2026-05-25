@@ -158,7 +158,7 @@ CRITICAL RULES:
           await statusCallback(`🛠 *Executing Tool:* \`${functionName}\`\n\`\`\`json\n${prettyArgs}\n\`\`\``);
           logger.info(`Executing tool ${functionName}`, args);
 
-          const toolResult = await executeTool(functionName, args);
+          const toolResult = await executeTool(functionName, args, this.chatId);
           
           if (functionName === 'write_file' || functionName === 'edit_file') {
             this.memoryManager.addModifiedFile(args.targetPath);
