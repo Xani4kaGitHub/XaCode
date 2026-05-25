@@ -27,8 +27,6 @@ export class ContextManager {
   constructor() {
     this.config = {
       maxContextTokens: 32000, // Fallback, we will use appConfig directly
-      compressionThresholdPercent: 0.85,
-      summaryMaxTokens: 2000,
     };
   }
 
