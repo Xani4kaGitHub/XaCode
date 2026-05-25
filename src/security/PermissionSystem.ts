@@ -17,7 +17,14 @@ export class PermissionSystem {
 
   enableFullAccess(durationMs?: number) {
     this.fullAccessEnabled = true;
-    const duration = durationMs ?? this.FULL_ACCESS_DURATION_MS;
+    let duration = durationMs ?? this.FULL_ACCESS_DURATION_MS;
+    
+    // Prevent setTimeout 32-bit integer overflow (max is ~24.8 days)
+    const MAX_TIMEOUT = 2147483647;
+    if (duration > MAX_TIMEOUT) {
+      duration = MAX_TIMEOUT;
+    }
+
     this.fullAccessExpiry = Date.now() + duration;
     logger.warn(`!!! FULL ACCESS MODE ENABLED !!!`);
     
