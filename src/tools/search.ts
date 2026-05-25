@@ -1,5 +1,3 @@
-import * as cheerio from 'cheerio';
-
 export async function webSearch(query: string): Promise<string> {
   try {
     const response = await fetch(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`, {
@@ -13,6 +11,7 @@ export async function webSearch(query: string): Promise<string> {
     }
 
     const html = await response.text();
+    const cheerio = await import('cheerio');
     const $ = cheerio.load(html);
     const results: string[] = [];
 
