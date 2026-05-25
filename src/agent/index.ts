@@ -73,7 +73,16 @@ RULES:
       if (config.PASTE_LOGS_ENABLED) {
         try {
           const history = this.memoryManager.getHistory();
-          const logText = history.map(m => `[${m.role.toUpperCase()}]\n${m.content}`).join('\n\n----------------------------------------\n\n');
+          let logText = history.map(m => `[${m.role.toUpperCase()}]\n${m.content}`).join('\n\n----------------------------------------\n\n');
+          
+          // Scrub sensitive information
+          if (config.DEEPSEEK_API_KEY) {
+            logText = logText.split(config.DEEPSEEK_API_KEY).join('[API_KEY_HIDDEN]');
+          }
+          if (config.TELEGRAM_BOT_TOKEN) {
+            logText = logText.split(config.TELEGRAM_BOT_TOKEN).join('[BOT_TOKEN_HIDDEN]');
+          }
+
           pastieLink = await pastieManager.uploadLog(task.substring(0, 50), logText);
         } catch (err: any) {
           pastieLink = `Error: ${err.message}`;
