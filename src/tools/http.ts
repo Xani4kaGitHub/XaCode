@@ -17,8 +17,10 @@ export async function httpRequest(
 
     if (body !== undefined && init.method !== 'GET' && init.method !== 'HEAD') {
       init.body = typeof body === 'string' ? body : JSON.stringify(body);
-      if (typeof body !== 'string' && !init.headers['Content-Type']) {
-        (init.headers as Record<string, string>)['Content-Type'] = 'application/json';
+      
+      const reqHeaders = init.headers as Record<string, string>;
+      if (typeof body !== 'string' && !reqHeaders['Content-Type']) {
+        reqHeaders['Content-Type'] = 'application/json';
       }
     }
 
