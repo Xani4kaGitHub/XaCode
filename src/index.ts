@@ -19,6 +19,7 @@ async function bootstrap() {
     
     logger.info('XaCode Agent successfully started and listening for Telegram messages.');
   } catch (error: any) {
+    console.error('CRASH ERROR:', error);
     logger.error('Failed to start XaCode Agent:', error);
     process.exit(1);
   }

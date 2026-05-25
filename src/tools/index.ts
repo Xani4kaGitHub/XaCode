@@ -1,9 +1,10 @@
-import { readFile, writeFile, editFile, listDirectory, searchCode, findFiles, readFiles, runInBackground, getTaskOutput } from './fs';
+import { readFile, writeFile, editFile, listDirectory, searchCode, findFiles, readFiles, runInBackground, getTaskOutput, deleteFile, fileInfo, manageBackgroundTask } from './fs';
 import { terminalManager } from '../terminal';
-import { webSearch } from './search';
+import { webSearch, readUrl } from './search';
 import { interactiveShell } from './shell';
 import { manageTodos } from './todos';
-import { askUserChoice } from '../events/interaction';
+import { askUserChoice, sendTelegramDocument } from '../events/interaction';
+import { httpRequest } from './http';
 
 // Define the tools for DeepSeek (OpenAI compatible format)
 export const toolDefinitions = [
@@ -177,7 +178,8 @@ export const toolDefinitions = [
         type: 'object',
         properties: {
           sessionId: { type: 'string', description: 'Session ID (null for a new session)' },
-          command: { type: 'string', description: 'Command to execute in the session' }
+          command: { type: 'string', description: 'Command to execute in the session' },
+          timeoutMs: { type: 'number', description: 'Optional wait time in ms (default 1500)' }
         },
         required: ['command']
       }
@@ -210,6 +212,95 @@ export const toolDefinitions = [
           options: { type: 'array', items: { type: 'string' }, description: 'Array of choices/buttons' }
         },
         required: ['question', 'options']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'http_request',
+      description: 'Make an HTTP/API request using native fetch.',
+      parameters: {
+        type: 'object',
+        properties: {
+          method: { type: 'string', description: 'HTTP method (GET, POST, PUT, DELETE, etc.)' },
+          url: { type: 'string', description: 'The URL to request' },
+          headers: { type: 'object', additionalProperties: { type: 'string' }, description: 'Key-value pairs of headers' },
+          body: { type: 'string', description: 'Optional request body string (JSON, etc.)' },
+          timeoutMs: { type: 'number', description: 'Optional timeout in ms' }
+        },
+        required: ['method', 'url']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'delete_file',
+      description: 'Delete a file or directory recursively.',
+      parameters: {
+        type: 'object',
+        properties: {
+          targetPath: { type: 'string', description: 'The path to delete' }
+        },
+        required: ['targetPath']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'read_url',
+      description: 'Fetch and extract readable text from a web page URL.',
+      parameters: {
+        type: 'object',
+        properties: {
+          url: { type: 'string', description: 'The web page URL' }
+        },
+        required: ['url']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'send_telegram_document',
+      description: 'Send a file from the workspace to the user in Telegram.',
+      parameters: {
+        type: 'object',
+        properties: {
+          filePath: { type: 'string', description: 'The path of the file to send' }
+        },
+        required: ['filePath']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'file_info',
+      description: 'Check if a file exists and get its metadata (size, type).',
+      parameters: {
+        type: 'object',
+        properties: {
+          targetPath: { type: 'string', description: 'The path to the file or directory' }
+        },
+        required: ['targetPath']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'manage_background_task',
+      description: 'List, check status, or kill background tasks.',
+      parameters: {
+        type: 'object',
+        properties: {
+          action: { type: 'string', enum: ['list', 'kill', 'status'], description: 'Action to perform' },
+          taskId: { type: 'string', description: 'The task ID (required for kill and status)' }
+        },
+        required: ['action']
       }
     }
   }
@@ -274,6 +365,26 @@ export async function executeTool(name: string, args: any, chatId?: number): Pro
         if (!chatId) throw new Error('chatId is required for interactive user choice');
         result = await askUserChoice(chatId, args.question, args.options);
         break;
+      case 'http_request':
+        const httpRes = await httpRequest(args.method, args.url, args.headers, args.body, args.timeoutMs);
+        result = `Status: ${httpRes.status}\nHeaders: ${JSON.stringify(httpRes.headers)}\nBody:\n${httpRes.body}`;
+        break;
+      case 'delete_file':
+        result = await deleteFile(args.targetPath);
+        break;
+      case 'read_url':
+        result = await readUrl(args.url);
+        break;
+      case 'send_telegram_document':
+        if (!chatId) throw new Error('chatId is required to send document');
+        result = await sendTelegramDocument(chatId, args.filePath);
+        break;
+      case 'file_info':
+        result = JSON.stringify(await fileInfo(args.targetPath), null, 2);
+        break;
+      case 'manage_background_task':
+        result = manageBackgroundTask(args.action, args.taskId);
+        break;
       default:
         throw new Error(`Unknown tool: ${name}`);
     }
@@ -282,11 +393,11 @@ export async function executeTool(name: string, args: any, chatId?: number): Pro
   }
   
   // Truncate massively long tool outputs to prevent context explosion
-  // We keep the first 2000 characters and the last 8000 characters so the agent can see both the start and the final errors.
-  const MAX_LENGTH = 10000;
+  // We keep the first 10000 characters and the last 30000 characters so the agent can see both the start and the final errors.
+  const MAX_LENGTH = 40000;
   if (result.length > MAX_LENGTH) {
-    const startStr = result.substring(0, 2000);
-    const endStr = result.substring(result.length - 8000);
+    const startStr = result.substring(0, 10000);
+    const endStr = result.substring(result.length - 30000);
     result = `${startStr}\n\n...[OUTPUT TRUNCATED: The result was too long (${result.length} chars). Middle section removed to save context memory]...\n\n${endStr}`;
   }
   

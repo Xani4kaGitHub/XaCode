@@ -31,6 +31,35 @@ export async function writeFile(targetPath: string, content: string): Promise<st
   return `File ${resolvedPath} successfully written.`;
 }
 
+export async function deleteFile(targetPath: string): Promise<string> {
+  const resolvedPath = path.resolve(targetPath);
+  checkPathAccess(resolvedPath);
+
+  await fs.rm(resolvedPath, { recursive: true, force: true });
+  logger.info(`Deleted path: ${resolvedPath}`);
+  return `Path ${resolvedPath} successfully deleted.`;
+}
+
+export async function fileInfo(targetPath: string): Promise<any> {
+  const resolvedPath = path.resolve(targetPath);
+  checkPathAccess(resolvedPath);
+
+  try {
+    const stats = await fs.stat(resolvedPath);
+    return {
+      exists: true,
+      isDirectory: stats.isDirectory(),
+      isFile: stats.isFile(),
+      sizeBytes: stats.size,
+      created: stats.birthtime,
+      modified: stats.mtime
+    };
+  } catch (e: any) {
+    if (e.code === 'ENOENT') return { exists: false };
+    throw e;
+  }
+}
+
 export async function editFile(targetPath: string, search: string, replace: string): Promise<string> {
   const resolvedPath = path.resolve(targetPath);
   checkPathAccess(resolvedPath);
@@ -103,7 +132,14 @@ export async function searchCode(pattern: string, basePath: string = '.'): Promi
     try {
       const content = await fs.readFile(fullPath, 'utf8');
       if (regex.test(content)) {
-        results.push(fullPath);
+        const lines = content.split('\n');
+        const lineRegex = new RegExp(pattern, 'g');
+        lines.forEach((line, index) => {
+          if (lineRegex.test(line)) {
+            const relative = path.relative(path.resolve(basePath), fullPath).replace(/\\/g, '/');
+            results.push(`${relative}:${index + 1}: ${line.trim()}`);
+          }
+        });
       }
     } catch (e) {
       // ignore errors
@@ -183,4 +219,32 @@ export function runInBackground(command: string, cwd: string = process.cwd()): s
 export function getTaskOutput(taskId: string): { stdout: string; stderr: string } | undefined {
   const info = taskRegistry.get(taskId);
   return info ? { stdout: info.stdout, stderr: info.stderr } : undefined;
+}
+
+export function manageBackgroundTask(action: 'list' | 'kill' | 'status', taskId?: string): string {
+  if (action === 'list') {
+    if (taskRegistry.size === 0) return 'No active background tasks.';
+    let output = 'Active background tasks:\n';
+    for (const [id, info] of taskRegistry.entries()) {
+      const status = info.process.exitCode === null ? 'Running' : `Exited (${info.process.exitCode})`;
+      output += `- ${id}: ${status}\n`;
+    }
+    return output;
+  }
+  
+  if (!taskId) return 'Error: taskId required for this action.';
+  const info = taskRegistry.get(taskId);
+  if (!info) return `Error: Task ID ${taskId} not found.`;
+
+  if (action === 'kill') {
+    info.process.kill();
+    return `Task ${taskId} killed.`;
+  }
+  
+  if (action === 'status') {
+    const status = info.process.exitCode === null ? 'Running' : `Exited (${info.process.exitCode})`;
+    return `Task ${taskId} Status: ${status}\nStdout Length: ${info.stdout.length}\nStderr Length: ${info.stderr.length}`;
+  }
+
+  return 'Unknown action.';
 }

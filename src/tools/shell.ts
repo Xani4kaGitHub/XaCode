@@ -9,7 +9,7 @@ interface InteractiveSession {
 
 const sessions = new Map<string, InteractiveSession>();
 
-export async function interactiveShell(sessionId: string | null, command: string): Promise<string> {
+export async function interactiveShell(sessionId: string | null, command: string, timeoutMs: number = 1500): Promise<string> {
   const id = sessionId || randomUUID();
   let session = sessions.get(id);
 
@@ -46,7 +46,7 @@ export async function interactiveShell(sessionId: string | null, command: string
   session.process.stdin?.write(command + '\n');
 
   // Wait a short amount of time for immediate output
-  await new Promise(resolve => setTimeout(resolve, 1500));
+  await new Promise(resolve => setTimeout(resolve, timeoutMs));
 
   let output = session.outputBuffer;
   

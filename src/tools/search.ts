@@ -29,8 +29,34 @@ export async function webSearch(query: string): Promise<string> {
       return 'No results found.';
     }
 
-    return results.join('\n');
+    return results.join('\n\n');
   } catch (error: any) {
-    return `Error during web search: ${error.message}`;
+    throw new Error(`Web search failed: ${error.message}`);
+  }
+}
+
+export async function readUrl(url: string): Promise<string> {
+  try {
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
+      }
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Failed to fetch URL: ${response.statusText}`);
+    }
+
+    const html = await response.text();
+    const cheerio = await import('cheerio');
+    const $ = cheerio.load(html);
+    
+    // Remove scripts and styles
+    $('script, style').remove();
+    
+    const text = $('body').text().replace(/\s+/g, ' ').trim();
+    return text;
+  } catch (error: any) {
+    throw new Error(`Failed to read URL: ${error.message}`);
   }
 }

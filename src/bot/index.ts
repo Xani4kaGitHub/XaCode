@@ -30,6 +30,14 @@ export class BotService {
       });
     });
 
+    interactionEmitter.on('send_document', async ({ chatId, filePath }) => {
+      try {
+        await this.bot.sendDocument(chatId, filePath);
+      } catch (e: any) {
+        logger.error(`Failed to send document: ${e.message}`);
+      }
+    });
+
     this.bot.on('message', async (msg) => {
       const chatId = msg.chat.id;
       const userId = msg.from?.id;

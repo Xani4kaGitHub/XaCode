@@ -27,3 +27,8 @@ export function askUserChoice(chatId: number, question: string, options: string[
     });
   });
 }
+
+export async function sendTelegramDocument(chatId: number, filePath: string): Promise<string> {
+  interactionEmitter.emit('send_document', { chatId, filePath });
+  return `Requested to send document: ${filePath}`;
+}

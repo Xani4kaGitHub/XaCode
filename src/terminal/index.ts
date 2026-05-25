@@ -49,7 +49,7 @@ export class TerminalManager {
       child.stdout.on('data', (data) => {
         const str = data.toString();
         stdout += str;
-        if (stdout.length > 10000) stdout = stdout.slice(-8000);
+        if (stdout.length > 32000) stdout = stdout.slice(-30000);
 
         stdoutLineBuffer += str;
         const lines = stdoutLineBuffer.split('\n');
@@ -64,7 +64,7 @@ export class TerminalManager {
       child.stderr.on('data', (data) => {
         const str = data.toString();
         stderr += str;
-        if (stderr.length > 10000) stderr = stderr.slice(-8000);
+        if (stderr.length > 32000) stderr = stderr.slice(-30000);
 
         stderrLineBuffer += str;
         const lines = stderrLineBuffer.split('\n');
@@ -88,8 +88,8 @@ export class TerminalManager {
           logger.warn(`[Terminal Live Err] ${stderrLineBuffer.trim()}`);
         }
         
-        const finalStdout = outStr.slice(-8000);
-        const finalStderr = errStr.slice(-8000);
+        const finalStdout = outStr.slice(-30000);
+        const finalStderr = errStr.slice(-30000);
         
         if (isTimeout) {
           logger.warn(`[Terminal] Command timed out after ${config.MAX_EXECUTION_TIMEOUT_MS}ms: "${command}"`);
