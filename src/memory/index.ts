@@ -53,6 +53,10 @@ export class MemoryManager {
     return this.contextManager.getMessagesForLLM();
   }
 
+  async ensureCompressed() {
+    await this.contextManager.ensureCompressed();
+  }
+
   getHistory(): ChatMessage[] {
     return this.contextManager.getFullHistory();
   }

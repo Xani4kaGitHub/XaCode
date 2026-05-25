@@ -20,6 +20,7 @@ export interface Config {
   ALWAYS_FULL_ACCESS: boolean;
   PASTE_LOGS_ENABLED: boolean;
   PASTE_LOGS_EXPIRY_MINUTES: number;
+  SMART_MEMORY_MODE: boolean;
 }
 
 export const config: Config = {
@@ -38,6 +39,7 @@ export const config: Config = {
   ALWAYS_FULL_ACCESS: process.env.ALWAYS_FULL_ACCESS === 'true',
   PASTE_LOGS_ENABLED: process.env.PASTE_LOGS_ENABLED !== 'false', // default true
   PASTE_LOGS_EXPIRY_MINUTES: parseInt(process.env.PASTE_LOGS_EXPIRY_MINUTES || '10', 10),
+  SMART_MEMORY_MODE: process.env.SMART_MEMORY_MODE !== 'false', // default true
 };
 
 export function validateConfig() {

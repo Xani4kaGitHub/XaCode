@@ -121,6 +121,7 @@ RULES:
 
     while ((config.DISABLE_LOOP_LIMIT || loopCount < MAX_LOOPS) && this.isExecuting && this.stateMachine.getState() !== AgentState.STOPPED) {
       loopCount++;
+      await this.memoryManager.ensureCompressed();
       const msgs = this.memoryManager.getMessagesForLLM();
 
       const response = await llmProvider.chatComplete({

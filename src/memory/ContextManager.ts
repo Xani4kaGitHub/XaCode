@@ -6,6 +6,8 @@ import { config as appConfig } from '../config';
 
 export interface MemoryConfig {
   maxContextTokens: number;
+  compressionThresholdPercent: number;
+  summaryMaxTokens: number;
 }
 
 export interface StructuredMemory {
@@ -26,11 +28,14 @@ export class ContextManager {
 
   constructor() {
     this.config = {
-      maxContextTokens: 32000, // Fallback, we will use appConfig directly
+      maxContextTokens: 32000,
+      compressionThresholdPercent: 0.85,
+      summaryMaxTokens: 2000,
     };
   }
 
   private shortTermHistory: any[] = [];
+  private summarizedMemory: string = '';
   private executionMemory: any = {};
   private systemPrompt: any = null;
   private toolSchemas: any[] = [];
@@ -47,6 +52,7 @@ export class ContextManager {
     this.systemPrompt = { role: 'system', content: systemContent };
     this.toolSchemas = tools;
     this.shortTermHistory = [];
+    this.summarizedMemory = '';
     this.memory = {
       goal: '',
       filesCreated: [],
@@ -62,19 +68,25 @@ export class ContextManager {
   }
 
   addMessage(msg: any) {
-    // Превентивний truncate великих tool results (>6000 символів)
-    if (msg.role === 'tool' && msg.content?.length > 6000) {
-      msg = { ...msg, content: msg.content.slice(0, 6000) + '\n[...truncated]' };
-    }
+    if (appConfig.SMART_MEMORY_MODE) {
+      if (msg.role === 'tool' && msg.content?.length > 6000) {
+        msg = { ...msg, content: msg.content.slice(0, 6000) + '\n[...truncated]' };
+      }
 
-    // Якщо додавання цього повідомлення проб'є ліміт — заздалегідь підріж історію
-    const predicted = this.getCurrentTokenUsage() + tokenizer.estimateTokenCount(msg.content || '');
-    if (predicted > (appConfig.MAX_CONTEXT_TOKENS || 32000) * 0.95 && this.shortTermHistory.length > 3) {
-      this.trimOneExchange(this.shortTermHistory);
+      const predicted = this.getCurrentTokenUsage() + tokenizer.estimateTokenCount(msg.content || '');
+      if (predicted > (appConfig.MAX_CONTEXT_TOKENS || 32000) * 0.95 && this.shortTermHistory.length > 3) {
+        this.trimOneExchange(this.shortTermHistory);
+      }
     }
 
     this.shortTermHistory.push(msg);
     this.updateMemory(msg);
+  }
+
+  async ensureCompressed() {
+    if (!appConfig.SMART_MEMORY_MODE) {
+      await this.checkAndCompress();
+    }
   }
 
   private updateMemory(msg: any) {
@@ -130,21 +142,27 @@ export class ContextManager {
   }
 
   getMessagesForLLM(): any[] {
+    if (!appConfig.SMART_MEMORY_MODE) {
+      const messages = [];
+      if (this.systemPrompt) messages.push(this.systemPrompt);
+      if (this.summarizedMemory) {
+        messages.push({ role: 'system', content: `Previous Context Summary:\n${this.summarizedMemory}` });
+      }
+      messages.push(...this.shortTermHistory);
+      return messages;
+    }
+
     const MAX_TOKENS = appConfig.MAX_CONTEXT_TOKENS || 32000;
     const messages: any[] = [];
     
-    // 1. System prompt
     if (this.systemPrompt) messages.push(this.systemPrompt);
     
-    // 2. Structured memory
     const memStr = this.formatMemory();
     if (memStr) messages.push({ role: 'system', content: memStr });
     
-    // 3. Smart window
     const window = this.getSmartWindow();
     messages.push(...window);
     
-    // 4. Trim if still over limit
     while (tokenizer.estimateMessagesTokenCount(messages) > MAX_TOKENS * 0.9 && messages.length > 3) {
       this.trimOneExchange(messages);
     }
@@ -200,6 +218,60 @@ export class ContextManager {
     return tokenizer.estimateMessagesTokenCount(msgs) + toolsTokenEstimate;
   }
 
+  private async checkAndCompress() {
+    const currentTokens = this.getCurrentTokenUsage();
+    const maxTokens = appConfig.MAX_CONTEXT_TOKENS || 32000;
+    const threshold = maxTokens * this.config.compressionThresholdPercent;
+
+    if (currentTokens > threshold) {
+      logger.warn(`Context window at ${Math.round((currentTokens / maxTokens) * 100)}%. Triggering compression.`);
+      await this.compressMemory();
+    }
+  }
+
+  private async compressMemory() {
+    eventBus.emit(EVENTS.CONTEXT_COMPRESSED);
+
+    let splitIndex = Math.max(0, this.shortTermHistory.length - 10);
+    
+    while (splitIndex > 0 && splitIndex < this.shortTermHistory.length) {
+      const msg = this.shortTermHistory[splitIndex];
+      if (msg.role === 'tool') {
+        splitIndex--;
+      } else if (msg.role === 'assistant' && msg.tool_calls) {
+        break;
+      } else {
+        break;
+      }
+    }
+
+    const messagesToSummarize = this.shortTermHistory.slice(0, splitIndex);
+    const messagesToKeep = this.shortTermHistory.slice(splitIndex);
+
+    if (messagesToSummarize.length === 0) return;
+
+    const summaryPrompt = `You are a memory compressor. Summarize the following conversation history. 
+Focus on: active goals, architectural decisions, recent errors, and modified files.
+Make it concise. Previous summary: ${this.summarizedMemory}`;
+
+    try {
+      const response = await llmProvider.chatComplete({
+        messages: [
+          { role: 'system', content: summaryPrompt },
+          ...messagesToSummarize
+        ]
+      });
+
+      if (response.content) {
+        this.summarizedMemory = response.content;
+        this.shortTermHistory = messagesToKeep;
+        logger.info('Memory compressed successfully.');
+      }
+    } catch (e: any) {
+      logger.error('Failed to compress memory:', e.message);
+    }
+  }
+
   getMemoryStats() {
     return {
       usageTokens: this.getCurrentTokenUsage(),
@@ -211,6 +283,7 @@ export class ContextManager {
 
   reset() {
     this.shortTermHistory = [];
+    this.summarizedMemory = '';
     this.memory = {
       goal: '',
       filesCreated: [],
