@@ -747,7 +747,14 @@ export class BotService {
         try {
           const path = require('path');
           const fs = require('fs');
-          const resolvedDir = path.resolve(targetDir);
+          let resolvedDir;
+          if (path.isAbsolute(targetDir)) {
+            resolvedDir = path.resolve(targetDir);
+          } else if (targetDir.startsWith('~/')) {
+            resolvedDir = path.resolve(require('os').homedir(), targetDir.slice(2));
+          } else {
+            resolvedDir = path.resolve(require('os').homedir(), targetDir);
+          }
           
           if (!fs.existsSync(resolvedDir)) {
             await this.bot.sendMessage(chatId, `❌ Директория не найдена: \`${resolvedDir}\``, { parse_mode: 'Markdown' });
