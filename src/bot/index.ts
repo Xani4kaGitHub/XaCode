@@ -543,6 +543,7 @@ export class BotService {
           + `• \`/workspace\` — Show current workspace info\n`
           + `• \`/terminal\` — Info about background terminals\n\n`
           + `🛑 *Control*\n`
+          + `• \`/new\` — Start a completely new session\n`
           + `• \`/stop\` — Abort current task immediately\n`
           + `• \`/reset\` — Clear bot memory and context\n`
           + `• \`/reload\` — Restart the XaCode systemd service\n`
@@ -729,6 +730,16 @@ export class BotService {
           + `Agent memory and context have been completely cleared.\n`
           + `Ready for a new task!`;
         await this.bot.sendMessage(chatId, resetMsg, { parse_mode: 'Markdown' });
+        break;
+      }
+      case '/new': {
+        autoMemory.initNewSession();
+        agentOrchestrator.getSession(chatId).memoryManager.resetSession('You are XaCode.');
+        const newMsg = `✨ *New Session Started*\n`
+          + `────────────────────────\n`
+          + `Agent memory has been cleared and a fresh session created.\n`
+          + `Ready for a new task!`;
+        await this.bot.sendMessage(chatId, newMsg, { parse_mode: 'Markdown' });
         break;
       }
       case '/cd': {
