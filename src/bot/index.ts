@@ -547,6 +547,16 @@ export class BotService {
 
   private async handleCommand(chatId: number, userId: number, text: string) {
     const cmd = text.split(' ')[0].toLowerCase();
+    
+    if (cmd.startsWith('/resume_')) {
+      const sessionId = text.split(' ')[0].substring('/resume_'.length);
+      const statusCallback = async (updateMsg: string) => {
+        try { await this.sendChunkedMessage(chatId, updateMsg); } catch (e) {}
+      };
+      await agentOrchestrator.getSession(chatId).resumeSession(sessionId, statusCallback);
+      return;
+    }
+
     switch (cmd) {
       case '/start':
       case '/help':
@@ -685,8 +695,8 @@ export class BotService {
         if (sessions.length === 0) {
           await this.bot.sendMessage(chatId, '📋 No saved sessions found.');
         } else {
-          const list = sessions.map((s, i) => `📅 ${i+1}. \`${s.id}\` | ${s.status} | ${s.sizeMb}MB | "${s.name || s.task}"`).join('\n');
-          await this.sendChunkedMessage(chatId, `📋 *Sessions:*\n${list}`);
+          const list = sessions.map((s, i) => `📅 ${i+1}. /resume_${s.id}\n📝 ${s.name || s.task}\n📊 Status: ${s.status} | Size: ${s.sizeMb}MB\n`).join('\n');
+          await this.sendChunkedMessage(chatId, `📋 Sessions:\n\n${list}`, false);
         }
         break;
       }
@@ -1159,7 +1169,7 @@ export class BotService {
   /**
    * Helper to send long messages bypassing the 4096 character Telegram limit
    */
-  private async sendChunkedMessage(chatId: number, text: string) {
+  private async sendChunkedMessage(chatId: number, text: string, useMarkdown: boolean = true) {
     const MAX_LENGTH = 4000;
     
     // Helper to format/sanitize text for Telegram Markdown V1
@@ -1169,12 +1179,17 @@ export class BotService {
     };
 
     const send = async (msgText: string) => {
-      const formatted = formatText(msgText);
       try {
-        await this.bot.sendMessage(chatId, formatted, { parse_mode: 'Markdown' });
+        if (useMarkdown) {
+          await this.bot.sendMessage(chatId, formatText(msgText), { parse_mode: 'Markdown' });
+        } else {
+          await this.bot.sendMessage(chatId, msgText);
+        }
       } catch (err: any) {
-        logger.warn(`Failed to send message as Markdown, falling back to plain text: ${err.message}`);
-        await this.bot.sendMessage(chatId, msgText);
+        logger.warn(`Failed to send message: ${err.message}`);
+        if (useMarkdown) {
+          await this.bot.sendMessage(chatId, msgText);
+        }
       }
     };
 
