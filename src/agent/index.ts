@@ -18,6 +18,7 @@ export class AgentSession {
   public isExecuting: boolean = false;
   public memoryManager: MemoryManager;
   public stateMachine: StateMachine;
+  private queuedMessages: string[] = [];
 
   constructor(chatId: number) {
     this.chatId = chatId;
@@ -93,8 +94,8 @@ export class AgentSession {
   async handleTask(task: string, statusCallback: (msg: string) => Promise<void> | void) {
     if (this.isExecuting) {
       // Mid-execution interruption support
-      this.memoryManager.addMessage({ role: 'user', content: task });
-      await statusCallback('⚠️ *Message added to ongoing task context.*');
+      this.queuedMessages.push(task);
+      await statusCallback('⚠️ *Message added to queue. It will be processed soon.*');
       return;
     }
 
@@ -236,6 +237,14 @@ RULES:
 
     while ((config.DISABLE_LOOP_LIMIT || loopCount < MAX_LOOPS) && this.isExecuting && this.stateMachine.getState() !== AgentState.STOPPED) {
       loopCount++;
+
+      if (this.queuedMessages.length > 0) {
+        for (const msg of this.queuedMessages) {
+          this.memoryManager.addMessage({ role: 'user', content: msg });
+        }
+        this.queuedMessages = [];
+      }
+
       await this.memoryManager.ensureCompressed();
       const msgs = this.memoryManager.getMessagesForLLM();
 
