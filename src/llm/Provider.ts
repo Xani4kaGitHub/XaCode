@@ -30,7 +30,7 @@ class DeepSeekProvider implements LLMProvider {
   constructor() {
     this.openai = new OpenAI({
       apiKey: config.DEEPSEEK_API_KEY,
-      baseURL: 'https://api.deepseek.com',
+      baseURL: config.DEEPSEEK_BASE_URL,
     });
   }
 
