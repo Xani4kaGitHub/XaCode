@@ -40,7 +40,7 @@ export class AgentSession {
       ? memoryObj.errors 
       : [];
 
-    const messages = this.memoryManager.getFullHistory ? this.memoryManager.getFullHistory() : this.memoryManager.getHistory();
+    const messages = this.memoryManager.getHistory();
     const metrics = metricsTracker.getMetrics();
 
     await autoMemory.saveSessionSnapshot({
