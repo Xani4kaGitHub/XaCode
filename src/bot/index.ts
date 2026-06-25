@@ -666,7 +666,7 @@ export class BotService {
         if (sessions.length === 0) {
           await this.bot.sendMessage(chatId, '📋 No saved sessions found.');
         } else {
-          const list = sessions.map((s, i) => `📅 ${i+1}. ${s.id} | ${s.status} | ${s.sizeMb}MB | "${s.name || s.task}"`).join('\n');
+          const list = sessions.map((s, i) => `📅 ${i+1}. \`${s.id}\` | ${s.status} | ${s.sizeMb}MB | "${s.name || s.task}"`).join('\n');
           await this.bot.sendMessage(chatId, `📋 *Sessions:*\n${list}`, { parse_mode: 'Markdown' });
         }
         break;
