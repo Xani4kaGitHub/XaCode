@@ -103,7 +103,9 @@ export class AgentSession {
     this.stateMachine.reset();
     this.stateMachine.transition(AgentState.ANALYZING_TASK);
     this.memoryManager.setTask(task);
-    await statusCallback(`🚀 *Task Started:*\n\`${task}\`\n\n🔍 *Analyzing...*`);
+    
+    const displayTask = task.length > 300 ? task.substring(0, 300) + '... [text truncated]' : task;
+    await statusCallback(`🚀 *Task Started:*\n\`${displayTask}\`\n\n🔍 *Analyzing...*`);
 
     const systemPrompt = `You are XaCode, an AI coding agent.
 Execute tools to solve tasks step-by-step. Keep code modifications minimal. State clearly when tasks complete.
