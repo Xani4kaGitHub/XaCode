@@ -189,6 +189,31 @@ export class BotService {
           return;
         }
 
+        if (query.data.startsWith('skill:')) {
+          const { skillManager } = require('../skills/SkillManager');
+          const skillName = query.data.split(':')[1];
+          const isEnabled = skillManager.toggleSkill(skillName);
+          
+          logger.info(`Toggled skill ${skillName} to ${isEnabled}`);
+          
+          const allSkills = skillManager.getAllSkills();
+          const keyboard = {
+            inline_keyboard: allSkills.map((s: any) => {
+              const enabled = skillManager.isSkillEnabled(s.name);
+              return [{
+                text: `${enabled ? '✅' : '❌'} ${s.name}`,
+                callback_data: `skill:${s.name}`
+              }];
+            })
+          };
+
+          await this.bot.editMessageReplyMarkup(keyboard, {
+            chat_id: chatId,
+            message_id: query.message.message_id
+          });
+          return;
+        }
+
         if (query.data.startsWith('cfg:')) {
           await this.handleConfigCallback(query, chatId, userId);
         } else if (query.data.startsWith('model:')) {
@@ -551,6 +576,7 @@ export class BotService {
           + `💾 *Memory & Resume*\n`
           + `• \`/resume <id>\` — Resume a saved session\n`
           + `• \`/sessions\` — List all saved sessions\n`
+          + `• \`/skills\` — View and toggle agent skills\n`
           + `• \`/checkpoint <name>\` — Save a checkpoint mid-execution\n`
           + `• \`/checkpoints\` — List all saved checkpoints\n`
           + `• \`/goto <id>\` — Restore a checkpoint\n`
@@ -669,6 +695,27 @@ export class BotService {
           const list = sessions.map((s, i) => `📅 ${i+1}. \`${s.id}\` | ${s.status} | ${s.sizeMb}MB | "${s.name || s.task}"`).join('\n');
           await this.bot.sendMessage(chatId, `📋 *Sessions:*\n${list}`, { parse_mode: 'Markdown' });
         }
+        break;
+      }
+      case '/skills': {
+        const { skillManager } = require('../skills/SkillManager');
+        const allSkills = skillManager.getAllSkills();
+        if (allSkills.length === 0) {
+          await this.bot.sendMessage(chatId, '📋 No skills found.');
+          break;
+        }
+
+        const keyboard = {
+          inline_keyboard: allSkills.map((s: any) => {
+            const isEnabled = skillManager.isSkillEnabled(s.name);
+            return [{
+              text: `${isEnabled ? '✅' : '❌'} ${s.name}`,
+              callback_data: `skill:${s.name}`
+            }];
+          })
+        };
+
+        await this.bot.sendMessage(chatId, '🛠 *Керування скілами*\nНатисніть на скіл, щоб увімкнути або вимкнути його:', { parse_mode: 'Markdown', reply_markup: keyboard });
         break;
       }
       case '/checkpoint':

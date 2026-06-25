@@ -13,9 +13,55 @@ export interface Skill {
 
 export class SkillManager {
   private skills: Map<string, Skill> = new Map();
+  private disabledSkills: Set<string> = new Set();
+  private disabledSkillsPath: string;
 
   constructor() {
+    this.disabledSkillsPath = path.join(os.homedir(), '.xacode', 'disabled_skills.json');
+    this.loadDisabledSkills();
     this.scanSkills();
+  }
+
+  private loadDisabledSkills() {
+    try {
+      if (fs.existsSync(this.disabledSkillsPath)) {
+        const data = JSON.parse(fs.readFileSync(this.disabledSkillsPath, 'utf8'));
+        this.disabledSkills = new Set(data);
+      }
+    } catch (e) {
+      logger.warn('Failed to load disabled skills.');
+    }
+  }
+
+  private saveDisabledSkills() {
+    try {
+      const dir = path.dirname(this.disabledSkillsPath);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(this.disabledSkillsPath, JSON.stringify(Array.from(this.disabledSkills), null, 2));
+    } catch (e) {
+      logger.warn('Failed to save disabled skills.');
+    }
+  }
+
+  public toggleSkill(name: string): boolean {
+    const lower = name.toLowerCase();
+    let isEnabled = true;
+    if (this.disabledSkills.has(lower)) {
+      this.disabledSkills.delete(lower);
+    } else {
+      this.disabledSkills.add(lower);
+      isEnabled = false;
+    }
+    this.saveDisabledSkills();
+    return isEnabled;
+  }
+  
+  public isSkillEnabled(name: string): boolean {
+    return !this.disabledSkills.has(name.toLowerCase());
+  }
+
+  public getAllSkills(): Skill[] {
+    return Array.from(this.skills.values());
   }
 
   public scanSkills() {
@@ -93,10 +139,11 @@ export class SkillManager {
   }
 
   public getSkillsCatalog(): string {
-    if (this.skills.size === 0) return '';
+    const activeSkills = this.getAllSkills().filter(s => this.isSkillEnabled(s.name));
+    if (activeSkills.length === 0) return '';
     
     let catalog = '\n📋 Доступні скіли (Agent Skills):\n';
-    for (const skill of this.skills.values()) {
+    for (const skill of activeSkills) {
       catalog += `  /${skill.name} — ${skill.description}\n`;
     }
     catalog += `\nТи можеш використовувати ці скіли коли це доречно.\nЯкщо pre-loaded скіл підходить — виконай його інструкції.\n`;
@@ -104,6 +151,7 @@ export class SkillManager {
   }
 
   public getSkill(name: string): Skill | undefined {
+    if (!this.isSkillEnabled(name)) return undefined;
     return this.skills.get(name.toLowerCase());
   }
 
@@ -125,7 +173,7 @@ export class SkillManager {
     const matched: Skill[] = [];
     const lowerMessage = message.toLowerCase();
 
-    for (const skill of this.skills.values()) {
+    for (const skill of this.getAllSkills().filter(s => this.isSkillEnabled(s.name))) {
       // Very basic keyword matching: split description into words > 3 chars
       const keywords = skill.description
         .toLowerCase()
