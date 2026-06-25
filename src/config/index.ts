@@ -41,7 +41,7 @@ export const config: Config = {
   WHISPER_ENABLED: process.env.WHISPER_ENABLED === 'true',
   WHISPER_MODEL: process.env.WHISPER_MODEL || 'tiny',
   ALWAYS_FULL_ACCESS: process.env.ALWAYS_FULL_ACCESS === 'true',
-  PASTE_LOGS_ENABLED: process.env.PASTE_LOGS_ENABLED !== 'false', // default true
+  PASTE_LOGS_ENABLED: process.env.PASTE_LOGS_ENABLED === 'true', // default false
   PASTE_LOGS_EXPIRY_MINUTES: parseInt(process.env.PASTE_LOGS_EXPIRY_MINUTES || '10', 10),
   SMART_MEMORY_MODE: process.env.SMART_MEMORY_MODE !== 'false', // default true
 };

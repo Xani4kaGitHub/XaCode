@@ -471,6 +471,7 @@ export class BotService {
           + `• \`/files\` — List files modified by current task\n\n`
           + `⚙️ *Configuration*\n`
           + `• \`/model\` — Switch DeepSeek API model\n`
+          + `• \`/logs\` — Toggle Session Log generation\n`
           + `• \`/config\` — View and modify system limits\n`
           + `• \`/fullaccess <enable|disable>\` — Manage Full Access mode\n\n`
           + `🛠 *System*\n`
@@ -633,6 +634,25 @@ export class BotService {
           + `────────────────────────\n`
           + `${files.length > 0 ? files.map(f => `• \`${f}\``).join('\n') : '_No files modified in this session._'}`;
         await this.bot.sendMessage(chatId, filesMsg, { parse_mode: 'Markdown' });
+        break;
+      }
+      case '/logs': {
+        config.PASTE_LOGS_ENABLED = !config.PASTE_LOGS_ENABLED;
+        const envPath = require('path').join(process.cwd(), '.env');
+        let envContent = await fs.promises.readFile(envPath, 'utf8');
+        
+        if (!envContent.includes('PASTE_LOGS_ENABLED=')) {
+          envContent += `\nPASTE_LOGS_ENABLED=${config.PASTE_LOGS_ENABLED}`;
+        } else {
+          envContent = envContent.replace(/PASTE_LOGS_ENABLED=.*/, `PASTE_LOGS_ENABLED=${config.PASTE_LOGS_ENABLED}`);
+        }
+        await fs.promises.writeFile(envPath, envContent);
+
+        const logsMsg = `📝 *Session Logs Configuration*\n`
+          + `────────────────────────\n`
+          + `• Session Logs are now: *${config.PASTE_LOGS_ENABLED ? '✅ ENABLED' : '❌ DISABLED'}*\n\n`
+          + `_(The setting has been saved to your .env file)_`;
+        await this.bot.sendMessage(chatId, logsMsg, { parse_mode: 'Markdown' });
         break;
       }
       case '/model': {
