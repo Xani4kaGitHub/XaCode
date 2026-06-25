@@ -13,6 +13,8 @@ import { pastieManager } from '../utils/pastie';
 export class BotService {
   private bot: TelegramBot;
   private pendingVoiceTasks = new Map<string, string>();
+  private pendingCustomChoices = new Map<number, { requestId: string, question: string }>();
+  private pendingCustomChoiceTexts = new Map<string, string>();
 
   constructor() {
     this.bot = new TelegramBot(config.TELEGRAM_BOT_TOKEN, { polling: true });
@@ -25,6 +27,7 @@ export class BotService {
       const inlineKeyboard = options.map((opt: string, i: number) => [
         { text: opt, callback_data: `choice:${requestId}:${i}` }
       ]);
+      inlineKeyboard.push([{ text: '✍️ Свой вариант', callback_data: `choice_custom:${requestId}` }]);
       await this.bot.sendMessage(chatId, `❓ *Agent asks:*\n${question}`, {
         parse_mode: 'Markdown',
         reply_markup: { inline_keyboard: inlineKeyboard }
@@ -56,6 +59,23 @@ export class BotService {
 
       // Ignore if it's not a text message
       if (!text) return;
+
+      if (this.pendingCustomChoices.has(chatId)) {
+        const { requestId, question } = this.pendingCustomChoices.get(chatId)!;
+        this.pendingCustomChoices.delete(chatId);
+        this.pendingCustomChoiceTexts.set(requestId, text);
+        
+        await this.bot.sendMessage(chatId, `Вы написали:\n_${text}_\n\nЧто с этим сделать?`, {
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: '✅ Отправить', callback_data: `choice_custom_send:${requestId}` }],
+              [{ text: '🔄 Переписать', callback_data: `choice_custom_rewrite:${requestId}` }]
+            ]
+          }
+        });
+        return;
+      }
 
       const pendingCfgPath = path.join(process.cwd(), '.xacode_pending_cfg.json');
       let pendingCfgKey = null;
@@ -271,6 +291,47 @@ export class BotService {
               parse_mode: 'Markdown'
             });
           } catch (e) {}
+        } else if (query.data.startsWith('choice_custom:')) {
+          const requestId = query.data.split(':')[1];
+          const questionText = query.message?.text?.replace('❓ Agent asks:\n', '') || 'Пожалуйста, введите ваш вариант:';
+          this.pendingCustomChoices.set(chatId, { requestId, question: questionText });
+          
+          await this.bot.answerCallbackQuery(query.id);
+          try {
+             await this.bot.editMessageText(`❓ *Agent asks:*\n_${questionText}_\n\n✍️ *Пожалуйста, напишите свой вариант ответным сообщением.*`, {
+               chat_id: chatId,
+               message_id: query.message?.message_id,
+               parse_mode: 'Markdown'
+             });
+          } catch (e) {}
+        } else if (query.data.startsWith('choice_custom_send:')) {
+           const requestId = query.data.split(':')[1];
+           const textToSend = this.pendingCustomChoiceTexts.get(requestId);
+           if (!textToSend) {
+             await this.bot.answerCallbackQuery(query.id, { text: '❌ Ошибка: текст утерян.', show_alert: true });
+             return;
+           }
+           interactionEmitter.emit(`choice_response_${requestId}`, textToSend);
+           this.pendingCustomChoiceTexts.delete(requestId);
+           await this.bot.answerCallbackQuery(query.id, { text: '✅ Отправлено!' });
+           try {
+             await this.bot.editMessageText(`✅ *User selected (custom):*\n_${textToSend}_`, {
+               chat_id: chatId,
+               message_id: query.message?.message_id,
+               parse_mode: 'Markdown'
+             });
+           } catch(e) {}
+        } else if (query.data.startsWith('choice_custom_rewrite:')) {
+           const requestId = query.data.split(':')[1];
+           this.pendingCustomChoices.set(chatId, { requestId, question: 'Пожалуйста, напишите свой вариант ответа заново.' });
+           await this.bot.answerCallbackQuery(query.id);
+           try {
+             await this.bot.editMessageText(`✍️ *Пожалуйста, напишите свой вариант ответным сообщением.*`, {
+               chat_id: chatId,
+               message_id: query.message?.message_id,
+               parse_mode: 'Markdown'
+             });
+           } catch(e) {}
         } else {
           logger.warn(`Unknown callback data: ${query.data}`);
         }
