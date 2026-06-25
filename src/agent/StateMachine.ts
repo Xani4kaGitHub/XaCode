@@ -28,8 +28,13 @@ const validTransitions: Record<AgentState, AgentState[]> = {
 };
 
 export class StateMachine {
+  private chatId: number;
   private currentState: AgentState = AgentState.IDLE;
   private stateHistory: AgentState[] = [];
+
+  constructor(chatId: number = 0) {
+    this.chatId = chatId;
+  }
 
   transition(newState: AgentState) {
     const allowed = validTransitions[this.currentState];
@@ -46,7 +51,7 @@ export class StateMachine {
     this.detectLoops(newState);
 
     this.currentState = newState;
-    eventBus.emit(EVENTS.AGENT_STATE_CHANGED, { oldState: this.stateHistory[this.stateHistory.length - 1], newState });
+    eventBus.emit(EVENTS.AGENT_STATE_CHANGED, { chatId: this.chatId, state: newState, oldState: this.stateHistory[this.stateHistory.length - 1] });
   }
 
   private detectLoops(newState: AgentState) {

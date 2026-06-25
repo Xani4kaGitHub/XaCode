@@ -23,7 +23,7 @@ export class AgentSession {
   constructor(chatId: number) {
     this.chatId = chatId;
     this.memoryManager = new MemoryManager();
-    this.stateMachine = new StateMachine();
+    this.stateMachine = new StateMachine(chatId);
 
     eventBus.on(EVENTS.AGENT_STATE_CHANGED, async (payload: { chatId: number, state: AgentState }) => {
       if (payload.chatId !== this.chatId) return;

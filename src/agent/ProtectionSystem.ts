@@ -52,8 +52,6 @@ export class ProtectionSystem {
     if (agentOrchestrator.getSession(0).stateMachine.getState() !== AgentState.FAILED && agentOrchestrator.getSession(0).stateMachine.getState() !== AgentState.STOPPED) {
       agentOrchestrator.getSession(0).stateMachine.transition(AgentState.FAILED);
       logger.error('Execution halted by Protection System. Diagnostics generated.');
-      // Emit event so the orchestrator can notify the user via Telegram
-      eventBus.emit(EVENTS.AGENT_STATE_CHANGED, { oldState: agentOrchestrator.getSession(0).stateMachine.getState(), newState: AgentState.FAILED, reason });
     }
   }
 
