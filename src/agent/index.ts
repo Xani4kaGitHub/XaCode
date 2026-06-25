@@ -11,6 +11,7 @@ import { metricsTracker } from '../metrics/MetricsTracker';
 import { permissionSystem } from '../security/PermissionSystem';
 import { pastieManager } from '../utils/pastie';
 import { eventBus, EVENTS } from '../events/EventBus';
+import { skillManager } from '../skills/SkillManager';
 
 export class AgentSession {
   public chatId: number;
@@ -104,16 +105,34 @@ RULES:
       if (pastMemory) {
         extraInstructions += `\n\n${pastMemory}`;
       }
+      
+      const skillsCatalog = skillManager.getSkillsCatalog();
+      if (skillsCatalog) {
+        extraInstructions += `\n\n${skillsCatalog}`;
+      }
 
       const finalSystemPrompt = systemPrompt + extraInstructions;
       this.memoryManager.resetSession(finalSystemPrompt, toolDefinitions as any);
+    }
+    
+    // Programmatic Pre-filter (Layer 2)
+    const preloadedSkills = skillManager.prefilterSkills(task);
+    let skillContext = '';
+    if (preloadedSkills.length > 0) {
+      skillContext += '\n\n[PRE-LOADED SKILLS]\nBased on your request, the following skills might be relevant:\n';
+      for (const skill of preloadedSkills) {
+        const body = skillManager.getSkillBody(skill.name);
+        if (body) {
+          skillContext += `\n--- SKILL: ${skill.name} ---\n${body}\n-------------------\n`;
+        }
+      }
     }
     
     const accessText = permissionSystem.isFullAccess() ?
       "\n\n[SYSTEM NOTIFICATION]: You currently have FULL FILESYSTEM ACCESS. You are NOT restricted to the sandbox." :
       "\n\n[SYSTEM NOTIFICATION]: You are currently RESTRICTED to the 'sandbox/' directory. Do NOT attempt to read/write outside it.";
 
-    this.memoryManager.addMessage({ role: 'user', content: task + accessText });
+    this.memoryManager.addMessage({ role: 'user', content: task + accessText + skillContext });
 
     const startMetrics = metricsTracker.getMetrics();
 

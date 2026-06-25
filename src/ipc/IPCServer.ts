@@ -175,6 +175,19 @@ export class IPCServer {
         agentOrchestrator.getSession(0).handleTask(args.prompt, (msg: string) => logger.info(`[Task] ${msg}`)).catch(e => logger.error(`CLI Task error: ${e.message}`));
         return { status: 'OK', message: 'Task submitted.' };
 
+      case 'execute_skill':
+        const { skillManager } = require('../skills/SkillManager');
+        const skill = skillManager.getSkill(args.name);
+        if (skill && skill.userInvocable !== false) {
+          const body = skillManager.getSkillBody(skill.name);
+          if (body) {
+            const taskText = `[EXPLICIT SKILL INVOCATION: ${skill.name}]\nExecute the following skill instructions strictly:\n${body}\n\nUser Arguments: ${args.args || 'None'}`;
+            agentOrchestrator.getSession(0).handleTask(taskText, (msg: string) => logger.info(`[Task] ${msg}`)).catch(e => logger.error(`CLI Task error: ${e.message}`));
+            return { status: 'OK', message: 'Skill executing.' };
+          }
+        }
+        return { status: 'ERROR', message: 'Skill not found or not invocable' };
+
       case 'stop_task':
         if (agentOrchestrator.getSession(0).stateMachine.getState() !== AgentState.IDLE) {
           agentOrchestrator.getSession(0).stateMachine.transition(AgentState.STOPPED);

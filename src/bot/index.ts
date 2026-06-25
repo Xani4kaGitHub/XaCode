@@ -9,6 +9,8 @@ import { logger } from '../logger';
 import { permissionSystem } from '../security/PermissionSystem';
 import { interactionEmitter } from '../events/interaction';
 import { pastieManager } from '../utils/pastie';
+import { eventBus, EVENTS } from '../events/EventBus';
+import { skillManager } from '../skills/SkillManager';
 
 export class BotService {
   private bot: TelegramBot;
@@ -870,8 +872,26 @@ export class BotService {
         }
         break;
       }
-      default:
+      default: {
+        const skillName = cmd.substring(1); // remove '/'
+        const skill = skillManager.getSkill(skillName);
+        if (skill && skill.userInvocable !== false) {
+          const body = skillManager.getSkillBody(skill.name);
+          if (body) {
+            const taskText = `[EXPLICIT SKILL INVOCATION: ${skill.name}]\nExecute the following skill instructions strictly:\n${body}\n\nUser Arguments: ${text.replace(cmd, '').trim()}`;
+            const statusCallback = async (updateMsg: string) => {
+              try {
+                await this.sendChunkedMessage(chatId, updateMsg);
+              } catch (err) {
+                logger.error('Failed to send telegram msg:', err);
+              }
+            };
+            agentOrchestrator.getSession(chatId).handleTask(taskText, statusCallback);
+            return;
+          }
+        }
         await this.bot.sendMessage(chatId, '❓ *Unknown command.*\nType `/help` to see all available commands.', { parse_mode: 'Markdown' });
+      }
     }
   }
 

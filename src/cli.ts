@@ -434,10 +434,30 @@ async function main() {
       break;
 
     case 'help':
-    default:
       printLogo();
       const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '../package.json'), 'utf8'));
       console.log(`${colors.green}XaCode CLI Enterprise v${pkg.version}${colors.reset}`);
+      console.log('Available commands:');
+      console.log('  info                        - Show detailed agent metrics, memory, and status');
+      break;
+    default:
+      // Try to execute as a skill via IPC
+      const skillRes: any = await sendIPCCommand('execute_skill', { name: command, args: args.slice(1).join(' ') });
+      if (skillRes && skillRes.status === 'OK') {
+        console.log(`${colors.green}Skill '${command}' invoked successfully! Streaming logs...${colors.reset}`);
+        const logProcSkill = spawn('sudo', ['journalctl', '-u', 'xacode', '-f'], { stdio: 'inherit' });
+        process.on('SIGINT', async () => {
+          console.log(`\n${colors.red}Caught interrupt signal (Ctrl+C). Stopping agent...${colors.reset}`);
+          await sendIPCCommand('stop_task');
+          logProcSkill.kill('SIGINT');
+          process.exit(0);
+        });
+        break;
+      }
+      
+      printLogo();
+      const pkg2 = JSON.parse(fs.readFileSync(path.join(__dirname, '../package.json'), 'utf8'));
+      console.log(`${colors.green}XaCode CLI Enterprise v${pkg2.version}${colors.reset}`);
       console.log('Available commands:');
       console.log('  info                        - Show detailed agent metrics, memory, and status');
       console.log('  cost                        - Show persistent API cost analytics');
