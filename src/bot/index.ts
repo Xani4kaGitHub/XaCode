@@ -546,7 +546,15 @@ export class BotService {
           + `• \`/stop\` — Abort current task immediately\n`
           + `• \`/reset\` — Clear bot memory and context\n`
           + `• \`/reload\` — Restart the XaCode systemd service\n`
-          + `• \`/cd\` — Change agent's working directory`;
+          + `• \`/cd\` — Change agent's working directory\n\n`
+          + `💾 *Memory & Resume*\n`
+          + `• \`/resume <id>\` — Resume a saved session\n`
+          + `• \`/sessions\` — List all saved sessions\n`
+          + `• \`/checkpoint <name>\` — Save a checkpoint mid-execution\n`
+          + `• \`/checkpoints\` — List all saved checkpoints\n`
+          + `• \`/goto <id>\` — Restore a checkpoint\n`
+          + `• \`/rename <id> <name>\` — Rename a session\n`
+          + `• \`/delete <id>\` — Delete a session`;
         await this.bot.sendMessage(chatId, helpMsg, { parse_mode: 'Markdown' });
         break;
       case '/plan': {
@@ -657,7 +665,7 @@ export class BotService {
         if (sessions.length === 0) {
           await this.bot.sendMessage(chatId, '📋 No saved sessions found.');
         } else {
-          const list = sessions.map((s, i) => `📅 ${i+1}. ${s.id} | ${s.status} | "${s.name || s.task}"`).join('\n');
+          const list = sessions.map((s, i) => `📅 ${i+1}. ${s.id} | ${s.status} | ${s.sizeMb}MB | "${s.name || s.task}"`).join('\n');
           await this.bot.sendMessage(chatId, `📋 *Sessions:*\n${list}`, { parse_mode: 'Markdown' });
         }
         break;

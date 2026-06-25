@@ -454,7 +454,7 @@ async function main() {
       if (sessRes.sessions && sessRes.sessions.length > 0) {
         console.log(`${colors.cyan}Saved Sessions:${colors.reset}`);
         sessRes.sessions.forEach((s: any, i: number) => {
-          console.log(`  ${i+1}. ${s.id} | ${s.status} | "${s.name || s.task}"`);
+          console.log(`  ${i+1}. ${s.id} | ${s.status} | ${s.sizeMb}MB | "${s.name || s.task}"`);
         });
       } else {
         console.log(`${colors.yellow}No saved sessions found.${colors.reset}`);

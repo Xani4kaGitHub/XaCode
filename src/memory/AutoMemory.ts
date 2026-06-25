@@ -251,13 +251,17 @@ export class AutoMemory {
       const sessions = [];
       for (const file of jsonFiles) {
         try {
-          const data = JSON.parse(await fs.promises.readFile(path.join(sessionsDir, file), 'utf8'));
+          const filePath = path.join(sessionsDir, file);
+          const stat = await fs.promises.stat(filePath);
+          const sizeMb = (stat.size / (1024 * 1024)).toFixed(2);
+          const data = JSON.parse(await fs.promises.readFile(filePath, 'utf8'));
           sessions.push({
             id: data.id,
             date: data.startedAt,
             status: data.status,
             task: data.task,
-            name: data.userName
+            name: data.userName,
+            sizeMb: sizeMb
           });
         } catch(e) {}
       }
