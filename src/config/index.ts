@@ -9,6 +9,7 @@ export interface Config {
   DEEPSEEK_API_KEY: string;
   DEEPSEEK_MODEL: string;
   DEEPSEEK_BASE_URL: string;
+  LLM_PROVIDER: string;
   ALLOWED_USER_IDS: number[];
   SANDBOX_DIR: string;
   MAX_EXECUTION_TIMEOUT_MS: number;
@@ -29,6 +30,7 @@ export const config: Config = {
   DEEPSEEK_API_KEY: process.env.DEEPSEEK_API_KEY || '',
   DEEPSEEK_MODEL: process.env.DEEPSEEK_MODEL || 'deepseek-v4-pro',
   DEEPSEEK_BASE_URL: process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com',
+  LLM_PROVIDER: process.env.LLM_PROVIDER || 'deepseek',
   ALLOWED_USER_IDS: (process.env.ALLOWED_USER_IDS || '').split(',').map(id => parseInt(id.trim(), 10)).filter(id => !isNaN(id)),
   SANDBOX_DIR: process.env.SANDBOX_DIR || path.resolve(process.cwd(), 'sandbox'),
   MAX_EXECUTION_TIMEOUT_MS: parseInt(process.env.MAX_EXECUTION_TIMEOUT_MS || '30000', 10),
