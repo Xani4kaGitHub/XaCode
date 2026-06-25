@@ -392,6 +392,16 @@ async function main() {
       spawn('sudo', ['journalctl', '-u', 'xacode', '-f'], { stdio: 'inherit' });
       break;
 
+    case 'reload':
+      console.log(`${colors.cyan}Restarting XaCode service...${colors.reset}`);
+      try {
+        spawnSync('sudo', ['systemctl', 'restart', 'xacode'], { stdio: 'inherit' });
+        console.log(`${colors.green}XaCode service restarted successfully.${colors.reset}`);
+      } catch (e: any) {
+        console.error(`${colors.red}Failed to restart service: ${e.message}${colors.reset}`);
+      }
+      break;
+
     case 'task':
       const prompt = args.slice(1).join(' ');
       if (!prompt) {
@@ -431,6 +441,7 @@ async function main() {
       console.log('  ban <telegram_id>           - Ban a user ID from accessing the bot');
       console.log('  fullaccess <enable|disable|status> [dur] - Enable/disable full filesystem access (e.g. 30m, 1h)');
       console.log('  logs                        - Stream live agent logs');
+      console.log('  reload                      - Restart the XaCode systemd service');
       console.log('  task "prompt"               - Run a task locally (Ctrl+C to abort)');
       console.log('  stop_task                   - Halt agent execution');
       break;

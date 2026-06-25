@@ -480,7 +480,8 @@ export class BotService {
           + `• \`/terminal\` — Info about background terminals\n\n`
           + `🛑 *Control*\n`
           + `• \`/stop\` — Abort current task immediately\n`
-          + `• \`/reset\` — Clear bot memory and context`;
+          + `• \`/reset\` — Clear bot memory and context\n`
+          + `• \`/reload\` — Restart the XaCode systemd service`;
         await this.bot.sendMessage(chatId, helpMsg, { parse_mode: 'Markdown' });
         break;
       case '/plan': {
@@ -582,6 +583,18 @@ export class BotService {
           + `Agent memory and context have been completely cleared.\n`
           + `Ready for a new task!`;
         await this.bot.sendMessage(chatId, resetMsg, { parse_mode: 'Markdown' });
+        break;
+      }
+      case '/reload': {
+        const reloadMsg = `🔄 *Restarting XaCode Service*\n`
+          + `────────────────────────\n`
+          + `The bot will restart now. Please wait a few seconds before sending new commands.`;
+        await this.bot.sendMessage(chatId, reloadMsg, { parse_mode: 'Markdown' });
+        
+        const cp = require('child_process');
+        setTimeout(() => {
+          cp.spawn('sudo', ['systemctl', 'restart', 'xacode'], { detached: true, stdio: 'ignore' }).unref();
+        }, 1000);
         break;
       }
       case '/workspace': {
