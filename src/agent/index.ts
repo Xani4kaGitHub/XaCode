@@ -133,7 +133,7 @@ RULES:
 1. SANDBOX: Restricted to 'sandbox/'. For outside access, ask user to run '/fullaccess enable'.
 2. TERMINAL: NO interactive commands (add -y, otherwise it hangs).
 3. TELEGRAM UI: 
-   - NO Markdown headings (#). Use bold + emojis ("🎯 *Heading*").
+   - NO Markdown headings (#). Telegram does not support them! NEVER use ## or ###. Use ONLY: bold, italic, code, blockquotes, or ||spoiler||.
    - NO Markdown tables (|---|). Use premium lists (e.g. 🌐 *Адрес:* \`URL\`).
    - Wrap code/values in single backticks (\`val\`). Clean spacing.
 4. LANGUAGE: Reply in the exact same language as the user.`;

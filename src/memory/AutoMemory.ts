@@ -109,16 +109,16 @@ export class AutoMemory {
       if (!fs.existsSync(this.memoryFilePath)) return null;
       
       const content = await fs.promises.readFile(this.memoryFilePath, 'utf8');
-      const sessions = content.split('---\n## 📅').filter(s => s.trim());
+      const sessions = content.split('---\n📅 *').filter(s => s.trim());
       
       if (sessions.length === 0) return null;
       
       // Get the very last session
       const lastSessionRaw = sessions[sessions.length - 1];
-      const lastSession = lastSessionRaw.startsWith('## 📅') ? lastSessionRaw : '## 📅' + lastSessionRaw;
+      const lastSession = lastSessionRaw.startsWith('📅 *') ? lastSessionRaw : '📅 *' + lastSessionRaw;
 
       // Extract date to check if it's older than 7 days
-      const dateMatch = lastSession.match(/## 📅 ([\d-]+)/);
+      const dateMatch = lastSession.match(/📅 \* ([\d-]+)/);
       if (dateMatch) {
         const sessionDate = new Date(dateMatch[1]);
         const daysOld = (Date.now() - sessionDate.getTime()) / (1000 * 60 * 60 * 24);
@@ -150,12 +150,12 @@ export class AutoMemory {
       let existingSessions: string[] = [];
       if (fs.existsSync(this.memoryFilePath)) {
         const content = await fs.promises.readFile(this.memoryFilePath, 'utf8');
-        existingSessions = content.split('---\n## 📅').filter(s => s.trim());
+        existingSessions = content.split('---\n📅 *').filter(s => s.trim());
       }
 
       // Format new session
       const lines: string[] = [];
-      lines.push(`## 📅 ${data.date} | Status: ${data.status}`);
+      lines.push(`📅 * ${data.date} | Status: ${data.status}`);
       if (data.task) lines.push(`🎯 Task: ${data.task}`);
       if (data.filesCreated.length) lines.push(`📁 Created/Edited: ${data.filesCreated.join(', ')}`);
       if (data.filesRead.length) lines.push(`📖 Read: ${data.filesRead.join(', ')}`);
@@ -170,7 +170,7 @@ export class AutoMemory {
 
       const newSessionStr = lines.join('\n');
       
-      existingSessions = existingSessions.map(s => s.startsWith('## 📅') ? s : '## 📅' + s);
+      existingSessions = existingSessions.map(s => s.startsWith('📅 *') ? s : '📅 *' + s);
       existingSessions.push(newSessionStr);
 
       if (existingSessions.length > 10) {
