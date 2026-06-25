@@ -599,7 +599,8 @@ export class BotService {
           }
           
           process.chdir(resolvedDir);
-          permissionSystem.setSandboxDir(resolvedDir);
+          const { securityManager } = require('../security');
+          securityManager.setSandboxDir(resolvedDir);
           config.SANDBOX_DIR = resolvedDir;
           
           const envPath = path.join(path.resolve(__dirname, '..', '..'), '.env');
