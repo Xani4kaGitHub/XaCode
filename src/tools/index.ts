@@ -6,6 +6,9 @@ import { manageTodos } from './todos';
 import { askUserChoice, sendTelegramDocument } from '../events/interaction';
 import { httpRequest } from './http';
 import { readLints } from './lint';
+import { handleArchive } from './archive';
+import { handleDocker } from './docker';
+import { handleGit } from './git';
 
 // Define the tools for DeepSeek (OpenAI compatible format)
 export const toolDefinitions = [
@@ -361,6 +364,60 @@ export const toolDefinitions = [
         required: ['targetPath']
       }
     }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'archive',
+      description: 'Extract or compress zip/tar.gz archives. Only supports .zip and .tar.gz.',
+      parameters: {
+        type: 'object',
+        properties: {
+          action: { type: 'string', enum: ['extract', 'compress'] },
+          source: { type: 'string', description: 'File to extract' },
+          sources: { type: 'array', items: { type: 'string' }, description: 'Files to compress' },
+          destination: { type: 'string', description: 'Where to extract' },
+          output: { type: 'string', description: 'Name of the output archive' },
+          format: { type: 'string', enum: ['zip', 'tar.gz'] }
+        },
+        required: ['action']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'docker',
+      description: 'Run docker commands (ps, logs, compose). Use ONLY if docker is installed.',
+      parameters: {
+        type: 'object',
+        properties: {
+          action: { type: 'string', enum: ['ps', 'logs', 'compose'] },
+          container: { type: 'string', description: 'Container id/name for logs' },
+          lines: { type: 'number', description: 'Number of lines for logs' },
+          command: { type: 'string', description: 'Compose command string (e.g. up -d)' }
+        },
+        required: ['action']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'git_operation',
+      description: 'Run structured git operations. USE ONLY IF THE USER EXPLICITLY REQUESTED A GIT OPERATION. NEVER COMMIT OR PUSH WITHOUT PERMISSION.',
+      parameters: {
+        type: 'object',
+        properties: {
+          action: { type: 'string', enum: ['status', 'commit', 'diff', 'log'] },
+          message: { type: 'string', description: 'Commit message' },
+          path: { type: 'string', description: 'Path for diff' },
+          maxCount: { type: 'number', description: 'Max commits for log' }
+        },
+        required: ['action']
+      }
+    }
   }
 ];
 
@@ -454,6 +511,15 @@ export async function executeTool(name: string, args: any, chatId?: number): Pro
         break;
       case 'create_directory':
         result = await createDirectory(args.targetPath);
+        break;
+      case 'archive':
+        result = JSON.stringify(await handleArchive(args), null, 2);
+        break;
+      case 'docker':
+        result = JSON.stringify(await handleDocker(args), null, 2);
+        break;
+      case 'git_operation':
+        result = JSON.stringify(await handleGit(args), null, 2);
         break;
       default:
         throw new Error(`Unknown tool: ${name}`);
