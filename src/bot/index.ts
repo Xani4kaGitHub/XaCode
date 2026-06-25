@@ -11,6 +11,7 @@ import { interactionEmitter } from '../events/interaction';
 import { pastieManager } from '../utils/pastie';
 import { eventBus, EVENTS } from '../events/EventBus';
 import { skillManager } from '../skills/SkillManager';
+import { autoMemory } from '../memory';
 
 export class BotService {
   private bot: TelegramBot;
@@ -638,6 +639,79 @@ export class BotService {
           + `Agent execution has been aborted immediately.\n`
           + `All active background processes have been terminated.`;
         await this.bot.sendMessage(chatId, stopMsg, { parse_mode: 'Markdown' });
+        break;
+      }
+      case '/resume':
+      case '/r': {
+        const parts = text.split(' ');
+        const sessionId = parts[1]; // undefined if not provided
+        const statusCallback = async (updateMsg: string) => {
+          try { await this.sendChunkedMessage(chatId, updateMsg); } catch (e) {}
+        };
+        await agentOrchestrator.getSession(chatId).resumeSession(sessionId, statusCallback);
+        break;
+      }
+      case '/sessions':
+      case '/s': {
+        const sessions = await autoMemory.listSessions();
+        if (sessions.length === 0) {
+          await this.bot.sendMessage(chatId, '📋 No saved sessions found.');
+        } else {
+          const list = sessions.map((s, i) => `📅 ${i+1}. ${s.id} | ${s.status} | "${s.name || s.task}"`).join('\n');
+          await this.bot.sendMessage(chatId, `📋 *Sessions:*\n${list}`, { parse_mode: 'Markdown' });
+        }
+        break;
+      }
+      case '/checkpoint':
+      case '/cp': {
+        const cpName = text.replace(cmd, '').trim();
+        if (!cpName) {
+           await this.bot.sendMessage(chatId, '❌ Usage: `/cp "name"`', { parse_mode: 'Markdown' });
+           break;
+        }
+        const success = await autoMemory.saveCheckpoint(cpName.replace(/"/g, ''), 99999, 'Saved via Telegram');
+        await this.bot.sendMessage(chatId, success ? '✅ Checkpoint saved!' : '❌ Failed to save checkpoint.');
+        break;
+      }
+      case '/checkpoints':
+      case '/cps': {
+        const cps = await autoMemory.listCheckpoints();
+        if (cps.length === 0) {
+          await this.bot.sendMessage(chatId, '📋 No saved checkpoints found.');
+        } else {
+          const list = cps.map((c) => `🔖 ${c.id}. "${c.name}" (${new Date(c.savedAt).toLocaleString()})`).join('\n');
+          await this.bot.sendMessage(chatId, `📋 *Checkpoints:*\n${list}`, { parse_mode: 'Markdown' });
+        }
+        break;
+      }
+      case '/goto':
+      case '/g': {
+        const parts = text.split(' ');
+        const cpId = parseInt(parts[1], 10);
+        if (isNaN(cpId)) {
+          await this.bot.sendMessage(chatId, '❌ Usage: `/goto <id>`', { parse_mode: 'Markdown' });
+          break;
+        }
+        const statusCallback = async (updateMsg: string) => {
+          try { await this.sendChunkedMessage(chatId, updateMsg); } catch (e) {}
+        };
+        await agentOrchestrator.getSession(chatId).gotoCheckpoint(cpId, statusCallback);
+        break;
+      }
+      case '/rename': {
+        const match = text.match(/^\/rename\s+(\S+)\s+(.+)$/);
+        if (!match) {
+          await this.bot.sendMessage(chatId, '❌ Usage: `/rename <sessionId> "new name"`', { parse_mode: 'Markdown' });
+          break;
+        }
+        const r = await autoMemory.renameSession(match[1], match[2].replace(/"/g, ''));
+        await this.bot.sendMessage(chatId, r ? '✅ Session renamed.' : '❌ Session not found.');
+        break;
+      }
+      case '/delete': {
+        const parts = text.split(' ');
+        const r = await autoMemory.deleteSession(parts[1]);
+        await this.bot.sendMessage(chatId, r ? '✅ Session deleted.' : '❌ Session not found.');
         break;
       }
       case '/reset': {

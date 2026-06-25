@@ -433,6 +433,99 @@ async function main() {
       }
       break;
 
+    case 'resume':
+    case 'r':
+      const resId = args[1];
+      console.log(`${colors.cyan}Resuming session...${colors.reset}`);
+      await sendIPCCommand('resume', { id: resId });
+      console.log(`${colors.green}Session resumed successfully! Streaming logs...${colors.reset}`);
+      const logProcRes = spawn('sudo', ['journalctl', '-u', 'xacode', '-f'], { stdio: 'inherit' });
+      process.on('SIGINT', async () => {
+        console.log(`\n${colors.red}Stopping agent...${colors.reset}`);
+        await sendIPCCommand('stop_task');
+        logProcRes.kill('SIGINT');
+        process.exit(0);
+      });
+      break;
+
+    case 'sessions':
+    case 's':
+      const sessRes: any = await sendIPCCommand('sessions');
+      if (sessRes.sessions && sessRes.sessions.length > 0) {
+        console.log(`${colors.cyan}Saved Sessions:${colors.reset}`);
+        sessRes.sessions.forEach((s: any, i: number) => {
+          console.log(`  ${i+1}. ${s.id} | ${s.status} | "${s.name || s.task}"`);
+        });
+      } else {
+        console.log(`${colors.yellow}No saved sessions found.${colors.reset}`);
+      }
+      break;
+
+    case 'checkpoint':
+    case 'cp':
+      const cpName = args.slice(1).join(' ').replace(/"/g, '');
+      if (!cpName) {
+        console.error(`${colors.red}Usage: xacode cp "name"${colors.reset}`);
+        break;
+      }
+      const cpRes: any = await sendIPCCommand('checkpoint', { name: cpName });
+      if (cpRes.status === 'OK') console.log(`${colors.green}Checkpoint saved!${colors.reset}`);
+      else console.error(`${colors.red}Failed to save checkpoint.${colors.reset}`);
+      break;
+
+    case 'checkpoints':
+    case 'cps':
+      const cpsRes: any = await sendIPCCommand('checkpoints');
+      if (cpsRes.checkpoints && cpsRes.checkpoints.length > 0) {
+        console.log(`${colors.cyan}Saved Checkpoints:${colors.reset}`);
+        cpsRes.checkpoints.forEach((c: any) => {
+          console.log(`  ${c.id}. "${c.name}" (${new Date(c.savedAt).toLocaleString()})`);
+        });
+      } else {
+        console.log(`${colors.yellow}No saved checkpoints found.${colors.reset}`);
+      }
+      break;
+
+    case 'goto':
+    case 'g':
+      const gId = args[1];
+      if (!gId) {
+        console.error(`${colors.red}Usage: xacode goto <id>${colors.reset}`);
+        break;
+      }
+      console.log(`${colors.cyan}Restoring checkpoint...${colors.reset}`);
+      await sendIPCCommand('goto', { id: gId });
+      console.log(`${colors.green}Checkpoint restored successfully! Streaming logs...${colors.reset}`);
+      const logProcG = spawn('sudo', ['journalctl', '-u', 'xacode', '-f'], { stdio: 'inherit' });
+      process.on('SIGINT', async () => {
+        console.log(`\n${colors.red}Stopping agent...${colors.reset}`);
+        await sendIPCCommand('stop_task');
+        logProcG.kill('SIGINT');
+        process.exit(0);
+      });
+      break;
+
+    case 'rename':
+      if (args.length < 3) {
+        console.error(`${colors.red}Usage: xacode rename <id> "new name"${colors.reset}`);
+        break;
+      }
+      const rName = args.slice(2).join(' ').replace(/"/g, '');
+      const rnRes: any = await sendIPCCommand('rename_session', { id: args[1], name: rName });
+      if (rnRes.status === 'OK') console.log(`${colors.green}Renamed successfully!${colors.reset}`);
+      else console.error(`${colors.red}Session not found.${colors.reset}`);
+      break;
+
+    case 'delete':
+      if (args.length < 2) {
+        console.error(`${colors.red}Usage: xacode delete <id>${colors.reset}`);
+        break;
+      }
+      const delRes: any = await sendIPCCommand('delete_session', { id: args[1] });
+      if (delRes.status === 'OK') console.log(`${colors.green}Deleted successfully!${colors.reset}`);
+      else console.error(`${colors.red}Session not found.${colors.reset}`);
+      break;
+
     case 'help':
       printLogo();
       const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '../package.json'), 'utf8'));
@@ -476,6 +569,13 @@ async function main() {
       console.log('  cd [dir]                    - Change working directory for the agent');
       console.log('  task "prompt"               - Run a task locally (Ctrl+C to abort)');
       console.log('  stop_task                   - Halt agent execution');
+      console.log('  resume [id] (or r)          - Resume last or specific session');
+      console.log('  sessions (or s)             - List saved sessions');
+      console.log('  checkpoint "name" (or cp)   - Save a checkpoint');
+      console.log('  checkpoints (or cps)        - List checkpoints');
+      console.log('  goto <id> (or g)            - Restore a checkpoint');
+      console.log('  rename <id> "name"          - Rename a session');
+      console.log('  delete <id>                 - Delete a session');
       break;
   }
 }

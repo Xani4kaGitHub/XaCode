@@ -195,6 +195,39 @@ export class IPCServer {
         }
         return { status: 'OK', message: 'Agent was already idle.' };
 
+      case 'resume':
+        agentOrchestrator.getSession(0).resumeSession(args.id, (msg: string) => logger.info(`[Task] ${msg}`)).catch(e => logger.error(`CLI Task error: ${e.message}`));
+        return { status: 'OK', message: 'Resuming session.' };
+
+      case 'goto':
+        agentOrchestrator.getSession(0).gotoCheckpoint(parseInt(args.id, 10), (msg: string) => logger.info(`[Task] ${msg}`)).catch(e => logger.error(`CLI Task error: ${e.message}`));
+        return { status: 'OK', message: 'Restoring checkpoint.' };
+
+      case 'sessions':
+        const { autoMemory } = require('../memory');
+        const sessions = await autoMemory.listSessions();
+        return { status: 'OK', sessions };
+
+      case 'checkpoints':
+        const am = require('../memory').autoMemory;
+        const cps = await am.listCheckpoints();
+        return { status: 'OK', checkpoints: cps };
+
+      case 'checkpoint':
+        const am2 = require('../memory').autoMemory;
+        const success = await am2.saveCheckpoint(args.name, 99999, 'Checkpoint saved manually via CLI/Telegram');
+        return success ? { status: 'OK', message: 'Checkpoint saved' } : { status: 'ERROR', message: 'Failed to save checkpoint' };
+
+      case 'rename_session':
+        const am3 = require('../memory').autoMemory;
+        const r1 = await am3.renameSession(args.id, args.name);
+        return r1 ? { status: 'OK', message: 'Renamed' } : { status: 'ERROR', message: 'Session not found' };
+
+      case 'delete_session':
+        const am4 = require('../memory').autoMemory;
+        const r2 = await am4.deleteSession(args.id);
+        return r2 ? { status: 'OK', message: 'Deleted' } : { status: 'ERROR', message: 'Session not found' };
+
       case 'fullaccess':
         const action = args.action;
         if (action === 'enable') {

@@ -40,6 +40,9 @@ export class AgentSession {
       ? memoryObj.errors 
       : [];
 
+    const messages = this.memoryManager.getFullHistory ? this.memoryManager.getFullHistory() : this.memoryManager.getHistory();
+    const metrics = metricsTracker.getMetrics();
+
     await autoMemory.saveSessionSnapshot({
       date: new Date().toISOString().split('T')[0],
       task: taskCtx.originalRequest,
@@ -49,7 +52,42 @@ export class AgentSession {
       decisions: memoryObj.decisions,
       discoveries: memoryObj.discoveries,
       errors: errorsToSave
-    });
+    }, messages, metrics);
+  }
+
+  async resumeSession(sessionId: string | undefined, statusCallback: (msg: string) => Promise<void> | void) {
+    if (this.isExecuting) return;
+    const session = await autoMemory.loadSession(sessionId);
+    if (!session) {
+      await statusCallback('❌ *Session not found.*');
+      return;
+    }
+    
+    let historyStr = session.messages.map(m => `${m.role.toUpperCase()}:\n${m.content}`).join('\n\n');
+    const task = `[RESUMED SESSION — ${session.startedAt}]\nTask: ${session.task}\n\n${historyStr}\n\n--- [ПРОДОВЖЕННЯ] ---\nReview the previous session history above and continue the task from where it left off.`;
+    
+    // Pass task to handleTask, it will do the initialization
+    await this.handleTask(task, statusCallback);
+  }
+
+  async gotoCheckpoint(checkpointId: number, statusCallback: (msg: string) => Promise<void> | void) {
+    if (this.isExecuting) return;
+    const cp = await autoMemory.getCheckpoint(checkpointId);
+    if (!cp) {
+      await statusCallback(`❌ *Checkpoint ${checkpointId} not found.*`);
+      return;
+    }
+    const session = await autoMemory.loadSession(cp.sessionId);
+    if (!session) {
+      await statusCallback('❌ *Associated session not found.*');
+      return;
+    }
+    
+    const messages = session.messages.slice(0, cp.messageIndex + 1);
+    let historyStr = messages.map(m => `${m.role.toUpperCase()}:\n${m.content}`).join('\n\n');
+    const task = `[RESTORED CHECKPOINT — ${cp.name}]\nOriginal Task: ${session.task}\n\n${historyStr}\n\n--- [ПРОДОВЖЕННЯ] ---\nReview the previous session history above up to checkpoint '${cp.name}' and continue from there.`;
+    
+    await this.handleTask(task, statusCallback);
   }
 
   async handleTask(task: string, statusCallback: (msg: string) => Promise<void> | void) {
