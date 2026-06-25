@@ -695,8 +695,13 @@ export class BotService {
         if (sessions.length === 0) {
           await this.bot.sendMessage(chatId, '📋 No saved sessions found.');
         } else {
-          const list = sessions.map((s, i) => `📅 ${i+1}. /resume_${s.id}\n📝 ${s.name || s.task}\n📊 Status: ${s.status} | Size: ${s.sizeMb}MB\n`).join('\n');
-          await this.sendChunkedMessage(chatId, `📋 Sessions:\n\n${list}`, false);
+          const recentSessions = sessions.slice(0, 15);
+          const list = recentSessions.map((s, i) => `📅 ${i+1}. /resume_${s.id}\n📝 ${s.name || s.task}\n📊 Status: ${s.status} | Size: ${s.sizeMb}MB\n`).join('\n');
+          let footer = '';
+          if (sessions.length > 15) {
+            footer = `\n_...и еще ${sessions.length - 15} сессий скрыто._`;
+          }
+          await this.sendChunkedMessage(chatId, `📋 Последние сессии (показано ${recentSessions.length} из ${sessions.length}):\n\n${list}${footer}`, false);
         }
         break;
       }
