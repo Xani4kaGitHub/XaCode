@@ -13,6 +13,7 @@ export interface LLMResponse {
   content: string | null;
   toolCalls?: any[];
   reasoningContent?: string;
+  anthropicContent?: any[];
   usage?: {
     promptTokens: number;
     completionTokens: number;
@@ -152,29 +153,35 @@ class AnthropicProvider implements LLMProvider {
              content: [toolResult]
            });
         }
-      } else if (msg.role === 'assistant' && msg.tool_calls) {
-        const content = [];
-        if (msg.content) content.push({ type: 'text', text: msg.content });
-        for (const tc of msg.tool_calls) {
-             let parsedInput = {};
-             if (typeof tc.function.arguments === 'string') {
-               try {
-                 parsedInput = JSON.parse(tc.function.arguments);
-               } catch (e) {
-                 logger.warn(`Failed to parse tool arguments for ${tc.function.name}:`, tc.function.arguments);
-                 parsedInput = { raw: tc.function.arguments }; // fallback
-               }
-             } else {
-               parsedInput = tc.function.arguments;
-             }
-             content.push({
-               type: 'tool_use',
-               id: tc.id,
-               name: tc.function.name,
-               input: parsedInput
-             });
+      } else if (msg.role === 'assistant') {
+        if (msg.anthropic_content) {
+          anthropicMessages.push({ role: 'assistant', content: msg.anthropic_content });
+        } else {
+          const content = [];
+          if (msg.content) content.push({ type: 'text', text: msg.content });
+          if (msg.tool_calls) {
+            for (const tc of msg.tool_calls) {
+                 let parsedInput = {};
+                 if (typeof tc.function.arguments === 'string') {
+                   try {
+                     parsedInput = JSON.parse(tc.function.arguments);
+                   } catch (e) {
+                     logger.warn(`Failed to parse tool arguments for ${tc.function.name}:`, tc.function.arguments);
+                     parsedInput = { raw: tc.function.arguments }; // fallback
+                   }
+                 } else {
+                   parsedInput = tc.function.arguments;
+                 }
+                 content.push({
+                   type: 'tool_use',
+                   id: tc.id,
+                   name: tc.function.name,
+                   input: parsedInput
+                 });
+            }
+          }
+          anthropicMessages.push({ role: 'assistant', content });
         }
-        anthropicMessages.push({ role: 'assistant', content });
       } else {
         anthropicMessages.push({ role: msg.role, content: msg.content });
       }
@@ -256,8 +263,9 @@ class AnthropicProvider implements LLMProvider {
         }
 
         return {
-          content: textContent || null,
+          content: textContent,
           toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
+          anthropicContent: response.content,
           usage: usage ? {
             promptTokens: usage.input_tokens || 0,
             completionTokens: usage.output_tokens || 0,

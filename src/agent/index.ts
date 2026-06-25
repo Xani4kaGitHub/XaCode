@@ -293,6 +293,7 @@ RULES:
           role: 'assistant',
           content: response.content || '',
           reasoning_content: response.reasoningContent,
+          anthropic_content: response.anthropicContent,
           tool_calls: response.toolCalls,
         });
 
