@@ -620,6 +620,17 @@ export class BotService {
 
         const cpus = os.cpus();
         const cpuModel = cpus.length > 0 ? cpus[0].model.trim() : 'Unknown';
+
+        let diskInfo = 'N/A';
+        try {
+          const stat = await fs.promises.statfs(process.cwd());
+          const total = (stat.bsize * stat.blocks) / (1024 ** 3);
+          const free = (stat.bsize * stat.bfree) / (1024 ** 3);
+          const used = total - free;
+          const percent = Math.round((used / total) * 100);
+          diskInfo = `${used.toFixed(1)}G / ${total.toFixed(1)}G (${percent}%)`;
+        } catch(e) {}
+        
         const loadAvg = os.loadavg().map((l: number) => l.toFixed(2)).join(', ');
         const totalMem = (os.totalmem() / (1024 ** 3)).toFixed(1);
         const freeMem = (os.freemem() / (1024 ** 3)).toFixed(1);
@@ -627,25 +638,7 @@ export class BotService {
         const sysUptime = formatUptime(os.uptime());
         const botUptime = formatUptime(process.uptime());
 
-        let diskInfo = 'N/A';
-        try {
-          if (os.platform() === 'linux' || os.platform() === 'darwin') {
-             const df = cp.execSync('df -h /').toString().split('\\n')[1].trim().replace(/\\s+/g, ' ').split(' ');
-             diskInfo = `${df[2]} / ${df[1]} (${df[4]})`;
-          } else if (os.platform() === 'win32') {
-             const diskOut = cp.execSync('wmic logicaldisk get size,freespace,caption').toString().split('\\n');
-             for (const line of diskOut) {
-                if (line.includes('C:')) {
-                   const parts = line.trim().replace(/\\s+/g, ' ').split(' ');
-                   const free = (parseInt(parts[1]) / (1024**3)).toFixed(1);
-                   const total = (parseInt(parts[2]) / (1024**3)).toFixed(1);
-                   const used = (parseFloat(total) - parseFloat(free)).toFixed(1);
-                   diskInfo = `${used}G / ${total}G (${Math.round((parseFloat(used)/parseFloat(total))*100)}%)`;
-                   break;
-                }
-             }
-          }
-        } catch(e) {}
+        
 
         const statusMsg = `📊 *Агент XaCode*\n`
           + `────────────────────────\n`

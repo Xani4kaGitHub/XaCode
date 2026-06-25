@@ -6,6 +6,7 @@ import { metricsTracker } from '../metrics/MetricsTracker';
 export interface LLMRequest {
   messages: any[];
   tools?: any[];
+  signal?: AbortSignal;
 }
 
 export interface LLMResponse {
@@ -46,6 +47,8 @@ class DeepSeekProvider implements LLMProvider {
           messages: request.messages,
           tools: request.tools,
           tool_choice: request.tools && request.tools.length > 0 ? 'auto' : 'none',
+        }, {
+          signal: request.signal
         });
         
         const executionTime = Date.now() - start;
@@ -175,7 +178,8 @@ class AnthropicProvider implements LLMProvider {
         const fetchRes = await fetch(config.DEEPSEEK_BASE_URL, {
           method: 'POST',
           headers,
-          body: JSON.stringify(body)
+          body: JSON.stringify(body),
+          signal: request.signal
         });
 
         if (!fetchRes.ok) {

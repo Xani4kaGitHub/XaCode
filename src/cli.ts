@@ -6,11 +6,6 @@ import { spawn, spawnSync } from 'child_process';
 
 const PROJECT_ROOT = path.join(__dirname, '..');
 
-// Auto-elevate to sudo on Linux/macOS if not running as root
-if (process.getuid && process.getuid() !== 0) {
-  spawnSync('sudo', [process.execPath, __filename, ...process.argv.slice(2)], { stdio: 'inherit' });
-  process.exit(0);
-}
 
 // ANSI escape codes for basic colors
 const colors = {

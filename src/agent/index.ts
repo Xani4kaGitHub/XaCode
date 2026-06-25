@@ -19,6 +19,7 @@ export class AgentSession {
   public memoryManager: MemoryManager;
   public stateMachine: StateMachine;
   private queuedMessages: string[] = [];
+  private abortController: AbortController | null = null;
 
   constructor(chatId: number) {
     this.chatId = chatId;
@@ -100,6 +101,7 @@ export class AgentSession {
     }
 
     this.isExecuting = true;
+    this.abortController = new AbortController();
     this.stateMachine.reset();
     this.stateMachine.transition(AgentState.ANALYZING_TASK);
     this.memoryManager.setTask(task);
@@ -251,12 +253,25 @@ RULES:
       await this.memoryManager.ensureCompressed();
       const msgs = this.memoryManager.getMessagesForLLM();
 
-      const response = await llmProvider.chatComplete({
-        messages: msgs,
-        tools: toolDefinitions as any,
-      });
+      let response;
+      try {
+        response = await llmProvider.chatComplete({
+          messages: msgs,
+          tools: toolDefinitions as any,
+          signal: this.abortController?.signal,
+        });
+      } catch (err: any) {
+        if (err.name === 'AbortError' || err.message.includes('abort')) {
+          logger.info('LLM request was aborted.');
+          break; // Stop the loop cleanly
+        }
+        throw err;
+      }
 
       if (response.toolCalls && response.toolCalls.length > 0) {
+        if (this.stateMachine.getState() !== AgentState.EXECUTING) {
+          this.stateMachine.transition(AgentState.EXECUTING);
+        }
         this.memoryManager.addMessage({
           role: 'assistant',
           content: response.content || '',
@@ -327,6 +342,9 @@ RULES:
           });
         }
       } else {
+        if (this.stateMachine.getState() !== AgentState.REPORTING) {
+          this.stateMachine.transition(AgentState.REPORTING);
+        }
         this.memoryManager.addMessage({ 
           role: 'assistant', 
           content: response.content || '',
@@ -341,6 +359,7 @@ RULES:
 
         if (response.content?.toLowerCase().includes('task complete') || response.content?.toLowerCase().includes('task is complete')) {
           this.memoryManager.completeTask();
+          this.stateMachine.transition(AgentState.COMPLETED);
           await statusCallback(`✅ *Task completed successfully!*`);
           break;
         }
@@ -356,6 +375,9 @@ RULES:
 
   stop() {
     this.isExecuting = false;
+    if (this.abortController) {
+      this.abortController.abort();
+    }
     if (this.stateMachine.getState() !== AgentState.STOPPED) {
       this.stateMachine.transition(AgentState.STOPPED);
     }
