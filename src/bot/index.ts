@@ -481,7 +481,8 @@ export class BotService {
           + `🛑 *Control*\n`
           + `• \`/stop\` — Abort current task immediately\n`
           + `• \`/reset\` — Clear bot memory and context\n`
-          + `• \`/reload\` — Restart the XaCode systemd service`;
+          + `• \`/reload\` — Restart the XaCode systemd service\n`
+          + `• \`/cd\` — Change agent's working directory`;
         await this.bot.sendMessage(chatId, helpMsg, { parse_mode: 'Markdown' });
         break;
       case '/plan': {
@@ -583,6 +584,39 @@ export class BotService {
           + `Agent memory and context have been completely cleared.\n`
           + `Ready for a new task!`;
         await this.bot.sendMessage(chatId, resetMsg, { parse_mode: 'Markdown' });
+        break;
+      }
+      case '/cd': {
+        const targetDir = text.split(' ').slice(1).join(' ') || require('os').homedir();
+        try {
+          const path = require('path');
+          const fs = require('fs');
+          const resolvedDir = path.resolve(targetDir);
+          
+          if (!fs.existsSync(resolvedDir)) {
+            await this.bot.sendMessage(chatId, `❌ Директория не найдена: \`${resolvedDir}\``, { parse_mode: 'Markdown' });
+            break;
+          }
+          
+          process.chdir(resolvedDir);
+          permissionSystem.setSandboxDir(resolvedDir);
+          config.SANDBOX_DIR = resolvedDir;
+          
+          const envPath = path.join(path.resolve(__dirname, '..', '..'), '.env');
+          if (fs.existsSync(envPath)) {
+            let envContent = await fs.promises.readFile(envPath, 'utf8');
+            if (!envContent.includes('SANDBOX_DIR=')) {
+              envContent += `\nSANDBOX_DIR=${resolvedDir}`;
+            } else {
+              envContent = envContent.replace(/SANDBOX_DIR=.*/, `SANDBOX_DIR=${resolvedDir}`);
+            }
+            await fs.promises.writeFile(envPath, envContent);
+          }
+          
+          await this.bot.sendMessage(chatId, `📂 Рабочая директория изменена на:\n\`${resolvedDir}\``, { parse_mode: 'Markdown' });
+        } catch (e: any) {
+          await this.bot.sendMessage(chatId, `❌ Ошибка смены директории: ${e.message}`);
+        }
         break;
       }
       case '/reload': {

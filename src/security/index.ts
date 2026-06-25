@@ -10,6 +10,10 @@ export class SecurityManager {
     this.sandboxDir = path.resolve(config.SANDBOX_DIR);
   }
 
+  setSandboxDir(dir: string) {
+    this.sandboxDir = path.resolve(dir);
+  }
+
   /**
    * Validates if a user is allowed to interact with the bot.
    */

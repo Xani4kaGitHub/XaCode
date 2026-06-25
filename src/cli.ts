@@ -422,6 +422,17 @@ async function main() {
       });
       break;
 
+    case 'cd':
+      const targetDir = args.slice(1).join(' ');
+      console.log(`${colors.cyan}Changing working directory...${colors.reset}`);
+      const cdRes: any = await sendIPCCommand('cd', { dir: targetDir });
+      if (cdRes.error || cdRes.status === 'ERROR') {
+        console.error(`${colors.red}Error: ${cdRes.error || cdRes.message}${colors.reset}`);
+      } else {
+        console.log(`${colors.green}${cdRes.message}${colors.reset}`);
+      }
+      break;
+
     case 'help':
     default:
       printLogo();
@@ -442,6 +453,7 @@ async function main() {
       console.log('  fullaccess <enable|disable|status> [dur] - Enable/disable full filesystem access (e.g. 30m, 1h)');
       console.log('  logs                        - Stream live agent logs');
       console.log('  reload                      - Restart the XaCode systemd service');
+      console.log('  cd [dir]                    - Change working directory for the agent');
       console.log('  task "prompt"               - Run a task locally (Ctrl+C to abort)');
       console.log('  stop_task                   - Halt agent execution');
       break;

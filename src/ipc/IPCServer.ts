@@ -137,6 +137,38 @@ export class IPCServer {
         await fs.promises.writeFile(banEnvPath, banEnv);
         return { status: 'OK', message: `User ${args.id} banned. Remaining allowed: ${newIds}` };
 
+      case 'cd': {
+        const targetDir = args.dir || require('os').homedir();
+        try {
+          const path = require('path');
+          const fs = require('fs');
+          const resolvedDir = path.resolve(targetDir);
+          
+          if (!fs.existsSync(resolvedDir)) {
+            return { status: 'ERROR', message: `Directory not found: ${resolvedDir}` };
+          }
+          
+          process.chdir(resolvedDir);
+          permissionSystem.setSandboxDir(resolvedDir);
+          config.SANDBOX_DIR = resolvedDir;
+          
+          const envPath = path.join(path.resolve(__dirname, '..', '..'), '.env');
+          if (fs.existsSync(envPath)) {
+            let envContent = await fs.promises.readFile(envPath, 'utf8');
+            if (!envContent.includes('SANDBOX_DIR=')) {
+              envContent += `\nSANDBOX_DIR=${resolvedDir}`;
+            } else {
+              envContent = envContent.replace(/SANDBOX_DIR=.*/, `SANDBOX_DIR=${resolvedDir}`);
+            }
+            await fs.promises.writeFile(envPath, envContent);
+          }
+          
+          return { status: 'OK', message: `Working directory changed to: ${resolvedDir}` };
+        } catch (e: any) {
+          return { status: 'ERROR', message: `Failed to change directory: ${e.message}` };
+        }
+      }
+
       case 'task':
         // Start task asynchronously, don't await here otherwise IPC blocks
         agentOrchestrator.getSession(0).handleTask(args.prompt, (msg: string) => logger.info(`[Task] ${msg}`)).catch(e => logger.error(`CLI Task error: ${e.message}`));
