@@ -50,8 +50,8 @@ export class MetricsTracker {
   }
 
   private setupListeners() {
-    eventBus.on(EVENTS.VERIFICATION_FAILED, () => this.metrics.verificationFailures++);
-    eventBus.on(EVENTS.CONTEXT_COMPRESSED, () => this.metrics.compressionFrequency++);
+    eventBus.on(EVENTS.VERIFICATION_FAILED, () => { this.metrics.verificationFailures++; });
+    eventBus.on(EVENTS.CONTEXT_COMPRESSED, () => { this.metrics.compressionFrequency++; });
   }
 
   addTokens(count: number, costEstimate: number = 0) {

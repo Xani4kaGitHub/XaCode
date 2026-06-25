@@ -156,12 +156,23 @@ class AnthropicProvider implements LLMProvider {
         const content = [];
         if (msg.content) content.push({ type: 'text', text: msg.content });
         for (const tc of msg.tool_calls) {
-           content.push({
-             type: 'tool_use',
-             id: tc.id,
-             name: tc.function.name,
-             input: typeof tc.function.arguments === 'string' ? JSON.parse(tc.function.arguments) : tc.function.arguments
-           });
+             let parsedInput = {};
+             if (typeof tc.function.arguments === 'string') {
+               try {
+                 parsedInput = JSON.parse(tc.function.arguments);
+               } catch (e) {
+                 logger.warn(`Failed to parse tool arguments for ${tc.function.name}:`, tc.function.arguments);
+                 parsedInput = { raw: tc.function.arguments }; // fallback
+               }
+             } else {
+               parsedInput = tc.function.arguments;
+             }
+             content.push({
+               type: 'tool_use',
+               id: tc.id,
+               name: tc.function.name,
+               input: parsedInput
+             });
         }
         anthropicMessages.push({ role: 'assistant', content });
       } else {
@@ -206,7 +217,10 @@ class AnthropicProvider implements LLMProvider {
 
         if (!fetchRes.ok) {
           const errText = await fetchRes.text();
-          throw new Error(`API Error ${fetchRes.status}: ${errText}`);
+          const err: any = new Error(`API Error ${fetchRes.status}: ${errText}`);
+          err.status = fetchRes.status;
+          err.retryAfterHeader = fetchRes.headers.get('retry-after');
+          throw err;
         }
 
         const response = await fetchRes.json();
@@ -258,8 +272,22 @@ class AnthropicProvider implements LLMProvider {
         if (attempt >= this.maxRetries) {
           throw new Error(`LLM Provider failed after ${this.maxRetries} attempts: ${error.message}`);
         }
-        await new Promise(res => setTimeout(res, delay));
-        delay *= 2;
+        
+        if (error.status === 429) {
+          let retryAfter = 0;
+          if (error.retryAfterHeader) {
+            const parsed = parseInt(error.retryAfterHeader, 10);
+            if (!isNaN(parsed)) retryAfter = parsed * 1000;
+          }
+          const jitter = Math.random() * 1000;
+          const waitTime = retryAfter > 0 ? retryAfter + jitter : delay + jitter;
+          logger.warn(`Rate limit hit. Waiting for ${Math.round(waitTime)}ms before retrying...`);
+          await new Promise(res => setTimeout(res, waitTime));
+          delay *= 3;
+        } else {
+          await new Promise(res => setTimeout(res, delay));
+          delay *= 2;
+        }
       }
     }
     throw new Error('Unexpected LLM Provider failure');

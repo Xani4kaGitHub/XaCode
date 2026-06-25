@@ -20,18 +20,35 @@ export class AgentSession {
   public stateMachine: StateMachine;
   private queuedMessages: string[] = [];
   private abortController: AbortController | null = null;
+  private stateChangedListener: any;
+  private protectionListener: any;
 
   constructor(chatId: number) {
     this.chatId = chatId;
     this.memoryManager = new MemoryManager();
     this.stateMachine = new StateMachine(chatId);
 
-    eventBus.on(EVENTS.AGENT_STATE_CHANGED, async (payload: { chatId: number, state: AgentState }) => {
+    this.stateChangedListener = async (payload: { chatId: number, state: AgentState }) => {
       if (payload.chatId !== this.chatId) return;
       if (payload.state === AgentState.COMPLETED || payload.state === AgentState.FAILED || payload.state === AgentState.STOPPED) {
         await this.saveSessionSnapshot(payload.state);
       }
-    });
+    };
+    eventBus.on(EVENTS.AGENT_STATE_CHANGED, this.stateChangedListener);
+
+    this.protectionListener = async (payload: { chatId: number, reason: string }) => {
+      if (payload.chatId !== this.chatId) return;
+      if (this.stateMachine.getState() !== AgentState.FAILED && this.stateMachine.getState() !== AgentState.STOPPED) {
+        logger.error(`Halting session ${this.chatId}: ${payload.reason}`);
+        this.stateMachine.transition(AgentState.FAILED);
+      }
+    };
+    eventBus.on(EVENTS.PROTECTION_HALT_EXECUTION, this.protectionListener);
+  }
+
+  destroy() {
+    eventBus.off(EVENTS.AGENT_STATE_CHANGED, this.stateChangedListener);
+    eventBus.off(EVENTS.PROTECTION_HALT_EXECUTION, this.protectionListener);
   }
 
   private async saveSessionSnapshot(state: AgentState) {

@@ -28,7 +28,7 @@ export interface Config {
 export const config: Config = {
   TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN || '',
   DEEPSEEK_API_KEY: process.env.DEEPSEEK_API_KEY || '',
-  DEEPSEEK_MODEL: process.env.DEEPSEEK_MODEL || 'deepseek-v4-pro',
+  DEEPSEEK_MODEL: process.env.DEEPSEEK_MODEL || 'deepseek-chat',
   DEEPSEEK_BASE_URL: process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com',
   LLM_PROVIDER: process.env.LLM_PROVIDER || 'deepseek',
   ALLOWED_USER_IDS: (process.env.ALLOWED_USER_IDS || '').split(',').map(id => parseInt(id.trim(), 10)).filter(id => !isNaN(id)),

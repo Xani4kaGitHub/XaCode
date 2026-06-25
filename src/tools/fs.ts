@@ -80,11 +80,11 @@ export async function editFile(targetPath: string, search: string, replace: stri
     throw new Error(`Error: Multiple matches found (${parts.length - 1} times). Please provide a more unique search string or more surrounding context.`);
   }
 
-  // Use the exact match to preserve original file's newline characters if they were different
-  const exactSearchIndex = normalizedContent.indexOf(normalizedSearch);
-  const exactSearchInFile = content.substring(exactSearchIndex, exactSearchIndex + search.length);
+  // Create a regex from the normalized search string that matches either \r\n or \n for every newline
+  const regexPattern = normalizedSearch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\n/g, '\\r?\\n');
+  const exactRegex = new RegExp(regexPattern);
   
-  const newContent = content.replace(exactSearchInFile, replace);
+  const newContent = content.replace(exactRegex, replace);
   await fs.writeFile(resolvedPath, newContent, 'utf8');
   logger.info(`Edited file: ${resolvedPath}`);
 
@@ -111,10 +111,22 @@ export async function listDirectory(targetPath: string): Promise<string[]> {
  * Internal helper to recursively walk directories with permission checks.
  */
 async function walkWithCheck(dir: string, fileHandler: (fullPath: string) => Promise<void>) {
-  checkPathAccess(path.resolve(dir));
-  const entries = await fs.readdir(dir, { withFileTypes: true });
+  const resolved = path.resolve(dir);
+  checkPathAccess(resolved);
+  
+  try {
+    const stats = await fs.stat(resolved);
+    if (stats.isFile()) {
+      await fileHandler(resolved);
+      return;
+    }
+  } catch (e) {
+    // If it doesn't exist or we can't access it, let readdir handle or throw
+  }
+
+  const entries = await fs.readdir(resolved, { withFileTypes: true });
   for (const entry of entries) {
-    const fullPath = path.resolve(dir, entry.name);
+    const fullPath = path.resolve(resolved, entry.name);
     if (entry.isDirectory()) {
       await walkWithCheck(fullPath, fileHandler);
     } else if (entry.isFile()) {

@@ -1,4 +1,4 @@
-type EventCallback = (payload: any) => void;
+type EventCallback = (payload: any) => Promise<void> | void;
 
 export class EventBus {
   private listeners: Map<string, EventCallback[]> = new Map();
@@ -17,16 +17,17 @@ export class EventBus {
     }
   }
 
-  emit(event: string, payload?: any) {
+  async emit(event: string, payload?: any) {
     const callbacks = this.listeners.get(event);
     if (callbacks) {
-      callbacks.forEach(cb => {
+      for (const cb of callbacks) {
         try {
-          cb(payload);
+          await cb(payload);
         } catch (error) {
-          console.error(`Error in event listener for ${event}:`, error);
+          const { logger } = require('../logger');
+          logger.error(`Error in event listener for ${event}:`, error);
         }
-      });
+      }
     }
   }
 }
@@ -45,4 +46,5 @@ export const EVENTS = {
   PROCESS_STARTED: 'process.started',
   PROCESS_STOPPED: 'process.stopped',
   AGENT_STATE_CHANGED: 'agent.state.changed',
+  PROTECTION_HALT_EXECUTION: 'protection.halt.execution',
 };
