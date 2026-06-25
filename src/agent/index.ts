@@ -1,5 +1,7 @@
+import fs from 'fs';
+import path from 'path';
 import { config } from '../config';
-import { MemoryManager, ChatMessage } from '../memory';
+import { MemoryManager, ChatMessage, autoMemory } from '../memory';
 import { toolDefinitions, executeTool } from '../tools';
 import { logger } from '../logger';
 import { llmProvider } from '../llm/Provider';
@@ -8,6 +10,7 @@ import { terminalManager } from '../terminal';
 import { metricsTracker } from '../metrics/MetricsTracker';
 import { permissionSystem } from '../security/PermissionSystem';
 import { pastieManager } from '../utils/pastie';
+import { eventBus, EVENTS } from '../events/EventBus';
 
 export class AgentSession {
   public chatId: number;
@@ -19,6 +22,33 @@ export class AgentSession {
     this.chatId = chatId;
     this.memoryManager = new MemoryManager();
     this.stateMachine = new StateMachine();
+
+    eventBus.on(EVENTS.AGENT_STATE_CHANGED, async (payload: { chatId: number, state: AgentState }) => {
+      if (payload.chatId !== this.chatId) return;
+      if (payload.state === AgentState.COMPLETED || payload.state === AgentState.FAILED || payload.state === AgentState.STOPPED) {
+        await this.saveSessionSnapshot(payload.state);
+      }
+    });
+  }
+
+  private async saveSessionSnapshot(state: AgentState) {
+    const memoryObj = this.memoryManager.contextManager.getStructuredMemory();
+    const taskCtx = this.memoryManager.getTaskContext();
+    
+    const errorsToSave = (state === AgentState.FAILED || state === AgentState.STOPPED) 
+      ? memoryObj.errors 
+      : [];
+
+    await autoMemory.saveSessionSnapshot({
+      date: new Date().toISOString().split('T')[0],
+      task: taskCtx.originalRequest,
+      status: state,
+      filesCreated: memoryObj.filesCreated,
+      filesRead: memoryObj.filesRead,
+      decisions: memoryObj.decisions,
+      discoveries: memoryObj.discoveries,
+      errors: errorsToSave
+    });
   }
 
   async handleTask(task: string, statusCallback: (msg: string) => Promise<void> | void) {
@@ -48,7 +78,35 @@ RULES:
 4. LANGUAGE: Reply in the exact same language as the user.`;
 
     if (this.memoryManager.getHistory().length === 0) {
-      this.memoryManager.resetSession(systemPrompt, toolDefinitions as any);
+      let extraInstructions = '';
+      const cwd = process.cwd();
+      
+      const xacodeMdPath = path.join(cwd, 'XACODE.md');
+      const localMdPath = path.join(cwd, 'XACODE.local.md');
+      
+      if (fs.existsSync(xacodeMdPath)) {
+        extraInstructions += `\n\n[PROJECT INSTRUCTIONS]\n${await fs.promises.readFile(xacodeMdPath, 'utf8')}`;
+      }
+      
+      const gitignorePath = path.join(cwd, '.gitignore');
+      if (fs.existsSync(gitignorePath)) {
+        const ignoreContent = await fs.promises.readFile(gitignorePath, 'utf8');
+        if (!ignoreContent.includes('.xacode') && !ignoreContent.includes('XACODE.local')) {
+          logger.warn('⚠️ XACODE.local.md detected but not in .gitignore. Add ".xacode*" to your .gitignore to avoid committing local config.');
+        }
+      }
+
+      if (fs.existsSync(localMdPath)) {
+        extraInstructions += `\n\n[PERSONAL INSTRUCTIONS]\n${await fs.promises.readFile(localMdPath, 'utf8')}`;
+      }
+
+      const pastMemory = await autoMemory.loadLastMemory();
+      if (pastMemory) {
+        extraInstructions += `\n\n${pastMemory}`;
+      }
+
+      const finalSystemPrompt = systemPrompt + extraInstructions;
+      this.memoryManager.resetSession(finalSystemPrompt, toolDefinitions as any);
     }
     
     const accessText = permissionSystem.isFullAccess() ?

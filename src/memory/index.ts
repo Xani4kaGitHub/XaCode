@@ -1,5 +1,6 @@
 import { logger } from '../logger';
 import { ContextManager } from './ContextManager';
+export * from './AutoMemory';
 
 export interface TaskContext {
   originalRequest: string;

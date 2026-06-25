@@ -63,6 +63,10 @@ export class ContextManager {
     };
   }
 
+  getStructuredMemory(): StructuredMemory {
+    return this.memory;
+  }
+
   setTask(task: string) {
     this.memory.goal = task;
   }
