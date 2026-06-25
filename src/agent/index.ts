@@ -167,9 +167,10 @@ RULES:
       }
     }
     
+    const cwd = process.cwd();
     const accessText = permissionSystem.isFullAccess() ?
-      "\n\n[SYSTEM NOTIFICATION]: You currently have FULL FILESYSTEM ACCESS. You are NOT restricted to the sandbox." :
-      "\n\n[SYSTEM NOTIFICATION]: You are currently RESTRICTED to the 'sandbox/' directory. Do NOT attempt to read/write outside it.";
+      `\n\n[SYSTEM NOTIFICATION]: You currently have FULL FILESYSTEM ACCESS. You are NOT restricted to the sandbox.\nYour Current Working Directory is: \`${cwd}\`` :
+      `\n\n[SYSTEM NOTIFICATION]: You are currently RESTRICTED to the 'sandbox/' directory. Do NOT attempt to read/write outside it.\nYour Current Working Directory is: \`${cwd}\``;
 
     this.memoryManager.addMessage({ role: 'user', content: task + accessText + skillContext });
 
