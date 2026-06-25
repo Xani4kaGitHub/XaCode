@@ -46,98 +46,102 @@ export class BotService {
     });
 
     this.bot.on('message', async (msg) => {
-      const chatId = msg.chat.id;
-      const userId = msg.from?.id;
-      const text = msg.text || '';
+      try {
+        const chatId = msg.chat.id;
+        const userId = msg.from?.id;
+        const text = msg.text || '';
 
-      if (!userId || !securityManager.isUserAllowed(userId)) {
-        logger.warn(`Unauthorized access attempt from user ID: ${userId}`);
-        return;
-      }
+        if (!userId || !securityManager.isUserAllowed(userId)) {
+          logger.warn(`Unauthorized access attempt from user ID: ${userId}`);
+          return;
+        }
 
-      if (msg.voice) {
-        await this.handleVoiceMessage(chatId, msg);
-        return;
-      }
+        if (msg.voice) {
+          await this.handleVoiceMessage(chatId, msg);
+          return;
+        }
 
-      // Ignore if it's not a text message
-      if (!text) return;
+        if (!text) return;
 
-      if (this.pendingCustomChoices.has(chatId)) {
-        const { requestId, question } = this.pendingCustomChoices.get(chatId)!;
-        this.pendingCustomChoices.delete(chatId);
-        this.pendingCustomChoiceTexts.set(requestId, text);
-        
-        await this.bot.sendMessage(chatId, `Вы написали:\n_${text}_\n\nЧто с этим сделать?`, {
-          parse_mode: 'Markdown',
-          reply_markup: {
-            inline_keyboard: [
-              [{ text: '✅ Отправить', callback_data: `choice_custom_send:${requestId}` }],
-              [{ text: '🔄 Переписать', callback_data: `choice_custom_rewrite:${requestId}` }]
-            ]
+        if (this.pendingCustomChoices.has(chatId)) {
+          const { requestId, question } = this.pendingCustomChoices.get(chatId)!;
+          this.pendingCustomChoices.delete(chatId);
+          this.pendingCustomChoiceTexts.set(requestId, text);
+          
+          await this.bot.sendMessage(chatId, `Вы написали:\n_${text}_\n\nЧто с этим сделать?`, {
+            parse_mode: 'Markdown',
+            reply_markup: {
+              inline_keyboard: [
+                [{ text: '✅ Отправить', callback_data: `choice_custom_send:${requestId}` }],
+                [{ text: '🔄 Переписать', callback_data: `choice_custom_rewrite:${requestId}` }]
+              ]
+            }
+          });
+          return;
+        }
+
+        const pendingCfgPath = path.join(process.cwd(), '.xacode_pending_cfg.json');
+        let pendingCfgKey = null;
+        if (fs.existsSync(pendingCfgPath)) {
+          try {
+            const map = JSON.parse(fs.readFileSync(pendingCfgPath, 'utf8'));
+            if (map[userId]) {
+              pendingCfgKey = map[userId];
+            }
+          } catch (e) {}
+        }
+
+        if (pendingCfgKey && !text.startsWith('/')) {
+          try {
+            await this.handlePendingConfigInput(chatId, userId, text, pendingCfgKey);
+          } catch (e: any) {
+            logger.error(`Error in handlePendingConfigInput: ${e.message}`);
+            await this.bot.sendMessage(chatId, `❌ Сталася помилка під час збереження налаштувань: ${e.message}`);
           }
-        });
-        return;
-      }
+          return;
+        }
 
-      const pendingCfgPath = path.join(process.cwd(), '.xacode_pending_cfg.json');
-      let pendingCfgKey = null;
-      if (fs.existsSync(pendingCfgPath)) {
-        try {
-          const map = JSON.parse(fs.readFileSync(pendingCfgPath, 'utf8'));
-          if (map[userId]) {
-            pendingCfgKey = map[userId];
+        if (text === '/pastes') {
+          const pastes = pastieManager.getActivePastes();
+          if (pastes.length === 0) {
+            return this.bot.sendMessage(chatId, '📭 No active pastes right now.');
           }
-        } catch (e) {}
-      }
 
-      if (pendingCfgKey && !text.startsWith('/')) {
-        try {
-          await this.handlePendingConfigInput(chatId, userId, text, pendingCfgKey);
-        } catch (e: any) {
-          logger.error(`Error in handlePendingConfigInput: ${e.message}`);
-          await this.bot.sendMessage(chatId, `❌ Сталася помилка під час збереження налаштувань: ${e.message}`);
-        }
-        return;
-      }
+          let msg = '📜 *Active Session Logs:*\n\n';
+          for (const p of pastes) {
+            const minutesLeft = Math.max(0, Math.round((p.expiresAt - Date.now()) / 60000));
+            msg += `• Task: \`${p.taskId}\`\n  URL: ${p.url}\n  Expires in: ${minutesLeft} mins\n\n`;
+          }
 
-      if (text === '/pastes') {
-        const pastes = pastieManager.getActivePastes();
-        if (pastes.length === 0) {
-          return this.bot.sendMessage(chatId, '📭 No active pastes right now.');
+          const keyboard = {
+            inline_keyboard: pastes.map(p => ([
+              { text: `🗑 Delete ${p.taskId.substring(0, 15)}...`, callback_data: `delpaste_${p.url}` }
+            ]))
+          };
+
+          return this.bot.sendMessage(chatId, msg, { parse_mode: 'Markdown', reply_markup: keyboard, disable_web_page_preview: true });
         }
 
-        let msg = '📜 *Active Session Logs:*\n\n';
-        for (const p of pastes) {
-          const minutesLeft = Math.max(0, Math.round((p.expiresAt - Date.now()) / 60000));
-          msg += `• Task: \`${p.taskId}\`\n  URL: ${p.url}\n  Expires in: ${minutesLeft} mins\n\n`;
+        if (text.startsWith('/')) {
+          await this.handleCommand(chatId, userId, text);
+          return;
         }
 
-        const keyboard = {
-          inline_keyboard: pastes.map(p => ([
-            { text: `🗑 Delete ${p.taskId.substring(0, 15)}...`, callback_data: `delpaste_${p.url}` }
-          ]))
+        const statusCallback = async (updateMsg: string) => {
+          try {
+            await this.sendChunkedMessage(chatId, updateMsg);
+          } catch (err) {
+            logger.error('Failed to send telegram msg:', err);
+          }
         };
 
-        return this.bot.sendMessage(chatId, msg, { parse_mode: 'Markdown', reply_markup: keyboard, disable_web_page_preview: true });
-      }
-
-      // Handle Commands
-      if (text.startsWith('/')) {
-        await this.handleCommand(chatId, userId, text);
-        return;
-      }
-
-      // Handle normal task
-      const statusCallback = async (updateMsg: string) => {
+        agentOrchestrator.getSession(chatId).handleTask(text, statusCallback);
+      } catch (error: any) {
+        logger.error(`Unhandled error in message handler: ${error.message}`);
         try {
-          await this.sendChunkedMessage(chatId, updateMsg);
-        } catch (err) {
-          logger.error('Failed to send telegram msg:', err);
-        }
-      };
-
-      agentOrchestrator.getSession(chatId).handleTask(text, statusCallback);
+          await this.bot.sendMessage(msg.chat.id, `❌ *Внутренняя ошибка бота:*\n\`${error.message}\``, { parse_mode: 'Markdown' });
+        } catch (e) {}
+      }
     });
 
     this.bot.on('callback_query', async (query) => {
