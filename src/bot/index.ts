@@ -696,12 +696,16 @@ export class BotService {
           await this.bot.sendMessage(chatId, '📋 No saved sessions found.');
         } else {
           const recentSessions = sessions.slice(0, 15);
-          const list = recentSessions.map((s, i) => `📅 ${i+1}. /resume_${s.id}\n📝 ${s.name || s.task}\n📊 Status: ${s.status} | Size: ${s.sizeMb}MB\n`).join('\n');
+          const list = recentSessions.map((s, i) => {
+            const shortName = (s.name || s.task || 'Без названия').replace(/\n/g, ' ').substring(0, 50);
+            return `🔹 /resume_${s.id} — ${shortName}... (${s.sizeMb}MB, ${s.status})`;
+          }).join('\n');
+          
           let footer = '';
           if (sessions.length > 15) {
-            footer = `\n_...и еще ${sessions.length - 15} сессий скрыто._`;
+            footer = `\n\n...и еще ${sessions.length - 15} сессий скрыто.`;
           }
-          await this.sendChunkedMessage(chatId, `📋 Последние сессии (показано ${recentSessions.length} из ${sessions.length}):\n\n${list}${footer}`, false);
+          await this.sendChunkedMessage(chatId, `📋 Последние сессии:\n\n${list}${footer}`, false);
         }
         break;
       }
