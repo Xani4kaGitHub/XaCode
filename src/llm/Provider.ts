@@ -26,7 +26,20 @@ export interface LLMProvider {
 
 class DeepSeekProvider implements LLMProvider {
   private openai: OpenAI;
-  private readonly maxRetries = 3;
+  private readonly maxRetries = 5;
+
+  private isRateLimit(error: any): boolean {
+    return error?.status === 429 || error?.response?.status === 429;
+  }
+
+  private getRetryAfter(error: any): number {
+    const header = error?.response?.headers?.['retry-after'] || error?.headers?.['retry-after'];
+    if (header) {
+      const parsed = parseInt(header, 10);
+      if (!isNaN(parsed)) return parsed * 1000;
+    }
+    return 0;
+  }
 
   constructor() {
     this.openai = new OpenAI({
@@ -83,9 +96,18 @@ class DeepSeekProvider implements LLMProvider {
           throw new Error(`LLM Provider failed after ${this.maxRetries} attempts: ${error.message}`);
         }
         
-        // Exponential backoff
-        await new Promise(res => setTimeout(res, delay));
-        delay *= 2;
+        if (this.isRateLimit(error)) {
+          const retryAfter = this.getRetryAfter(error);
+          const jitter = Math.random() * 1000;
+          const waitTime = retryAfter > 0 ? retryAfter + jitter : delay + jitter;
+          logger.warn(`Rate limit hit. Waiting for ${Math.round(waitTime)}ms before retrying...`);
+          await new Promise(res => setTimeout(res, waitTime));
+          delay *= 3;
+        } else {
+          // Exponential backoff
+          await new Promise(res => setTimeout(res, delay));
+          delay *= 2;
+        }
       }
     }
     throw new Error('Unexpected LLM Provider failure');

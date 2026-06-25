@@ -19,7 +19,7 @@ const validTransitions: Record<AgentState, AgentState[]> = {
   [AgentState.ANALYZING_TASK]: [AgentState.RESEARCHING_PROJECT, AgentState.PLANNING, AgentState.EXECUTING, AgentState.REPORTING, AgentState.COMPLETED, AgentState.FAILED, AgentState.STOPPED, AgentState.IDLE],
   [AgentState.RESEARCHING_PROJECT]: [AgentState.PLANNING, AgentState.COMPLETED, AgentState.FAILED, AgentState.STOPPED, AgentState.IDLE],
   [AgentState.PLANNING]: [AgentState.EXECUTING, AgentState.COMPLETED, AgentState.FAILED, AgentState.STOPPED, AgentState.IDLE],
-  [AgentState.EXECUTING]: [AgentState.VERIFYING, AgentState.COMPLETED, AgentState.FAILED, AgentState.STOPPED, AgentState.IDLE],
+  [AgentState.EXECUTING]: [AgentState.VERIFYING, AgentState.REPORTING, AgentState.COMPLETED, AgentState.FAILED, AgentState.STOPPED, AgentState.IDLE],
   [AgentState.VERIFYING]: [AgentState.REPORTING, AgentState.EXECUTING, AgentState.COMPLETED, AgentState.FAILED, AgentState.STOPPED, AgentState.IDLE], // Loop back to EXECUTING if verification fails and we retry
   [AgentState.REPORTING]: [AgentState.COMPLETED, AgentState.FAILED, AgentState.STOPPED, AgentState.IDLE],
   [AgentState.COMPLETED]: [AgentState.IDLE],
