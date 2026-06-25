@@ -51,33 +51,43 @@ export class AutoMemory {
 
   constructor() {
     this.baseDir = path.join(os.homedir(), '.xacode', 'projects');
+    this.projectHash = 'global';
+    this.memoryFilePath = path.join(this.baseDir, this.projectHash, 'memory.md');
+    this.migrateOldSessions();
+  }
+
+  private migrateOldSessions() {
+    try {
+      if (!fs.existsSync(this.baseDir)) return;
+      const globalSessionsDir = path.join(this.baseDir, 'global', 'sessions');
+      if (!fs.existsSync(globalSessionsDir)) fs.mkdirSync(globalSessionsDir, { recursive: true });
+      
+      const dirs = fs.readdirSync(this.baseDir, { withFileTypes: true });
+      for (const d of dirs) {
+        if (d.isDirectory() && d.name !== 'global') {
+          const oldSessionsDir = path.join(this.baseDir, d.name, 'sessions');
+          if (fs.existsSync(oldSessionsDir)) {
+            const files = fs.readdirSync(oldSessionsDir);
+            for (const file of files) {
+              if (file.endsWith('.json')) {
+                const oldPath = path.join(oldSessionsDir, file);
+                const newPath = path.join(globalSessionsDir, file);
+                if (!fs.existsSync(newPath)) {
+                  fs.copyFileSync(oldPath, newPath);
+                  logger.info(`Migrated old session ${file} to global memory.`);
+                }
+              }
+            }
+          }
+        }
+      }
+    } catch (e: any) {
+      logger.warn(`Failed to migrate old sessions: ${e.message}`);
+    }
   }
 
   private getProjectHash(): string {
-    if (this.projectHash) return this.projectHash;
-
-    let idString = '';
-    
-    // Priority 1: git remote origin url
-    try {
-      idString = execSync('git config --get remote.origin.url', { encoding: 'utf8', stdio: 'pipe' }).trim();
-    } catch (e) {}
-
-    // Priority 2: git root path
-    if (!idString) {
-      try {
-        idString = execSync('git rev-parse --show-toplevel', { encoding: 'utf8', stdio: 'pipe' }).trim();
-      } catch (e) {}
-    }
-
-    // Priority 3: cwd
-    if (!idString) {
-      idString = process.cwd();
-    }
-
-    this.projectHash = crypto.createHash('sha256').update(idString).digest('hex').substring(0, 16);
-    this.memoryFilePath = path.join(this.baseDir, this.projectHash, 'memory.md');
-    return this.projectHash;
+    return 'global';
   }
 
   public initNewSession() {
