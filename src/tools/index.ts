@@ -364,7 +364,6 @@ export const toolDefinitions = [
         required: ['targetPath']
       }
     }
-    }
   },
   {
     type: 'function',
