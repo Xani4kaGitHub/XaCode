@@ -46,6 +46,10 @@ class DeepSeekProvider implements LLMProvider {
     this.openai = new OpenAI({
       apiKey: config.DEEPSEEK_API_KEY,
       baseURL: config.DEEPSEEK_BASE_URL,
+      defaultHeaders: {
+        'HTTP-Referer': 'https://github.com/Xani4kaGitHub/XaCode',
+        'X-Title': 'XaCode Agent'
+      }
     });
   }
 
@@ -208,11 +212,13 @@ class AnthropicProvider implements LLMProvider {
           'Content-Type': 'application/json',
           'x-api-key': config.ANTHROPIC_API_KEY || config.DEEPSEEK_API_KEY,
           'anthropic-version': '2023-06-01',
-          // Bypass blocks by spoofing standard user-agents and origin
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-          'Origin': 'https://freemodel.dev',
-          'Referer': 'https://freemodel.dev/'
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
         };
+
+        if (config.ANTHROPIC_BASE_URL.includes('freemodel')) {
+          headers['Origin'] = 'https://freemodel.dev';
+          headers['Referer'] = 'https://freemodel.dev/';
+        }
 
         const body: any = {
           model: config.DEEPSEEK_MODEL || 'deepseek-chat',

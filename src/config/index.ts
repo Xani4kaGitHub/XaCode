@@ -1,8 +1,8 @@
 import dotenv from 'dotenv';
 import path from 'path';
 
-// Load .env
-dotenv.config();
+// Load .env explicitly from the project root (handles systemd cwd issues)
+dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
 export interface Config {
   TELEGRAM_BOT_TOKEN: string;
