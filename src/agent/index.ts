@@ -134,7 +134,7 @@ export class AgentSession {
     this.abortController = new AbortController();
     this.stateMachine.reset();
     this.stateMachine.transition(AgentState.ANALYZING_TASK);
-    this.memoryManager.setTask(task);
+    // Don't set task here yet, we will set it after auto-restore logic
     
     const displayTask = task.length > 300 ? task.substring(0, 300) + '... [text truncated]' : task;
     await statusCallback(`🚀 *Task Started:*\n\`${displayTask}\`\n\n🔍 *Analyzing...*`);
@@ -152,40 +152,71 @@ RULES:
 4. LANGUAGE: Reply in the exact same language as the user.`;
 
     if (this.memoryManager.getHistory().length === 0) {
-      let extraInstructions = '';
-      const cwd = process.cwd();
-      
-      const xacodeMdPath = path.join(cwd, 'XACODE.md');
-      const localMdPath = path.join(cwd, 'XACODE.local.md');
-      
-      if (fs.existsSync(xacodeMdPath)) {
-        extraInstructions += `\n\n[PROJECT INSTRUCTIONS]\n${await fs.promises.readFile(xacodeMdPath, 'utf8')}`;
-      }
-      
-      const gitignorePath = path.join(cwd, '.gitignore');
-      if (fs.existsSync(gitignorePath)) {
-        const ignoreContent = await fs.promises.readFile(gitignorePath, 'utf8');
-        if (!ignoreContent.includes('.xacode') && !ignoreContent.includes('XACODE.local')) {
-          logger.warn('⚠️ XACODE.local.md detected but not in .gitignore. Add ".xacode*" to your .gitignore to avoid committing local config.');
+      let isAutoRestored = false;
+      if (!this.autoMemory.getCurrentSessionId()) {
+        const lastSession = await this.autoMemory.loadSession();
+        if (lastSession && lastSession.messages && lastSession.messages.length > 0) {
+          // Auto-restore the crashed/previous session properly into the context
+          this.autoMemory.setCurrentSessionId(lastSession.id);
+          this.memoryManager.resetSession(systemPrompt, toolDefinitions as any);
+          
+          for (const msg of lastSession.messages) {
+            if (msg.role !== 'system') { // Skip the old system prompt
+              this.memoryManager.addMessage(msg);
+            }
+          }
+          
+          // Re-apply the old task, but add the user's new input as a message
+          this.memoryManager.setTask(lastSession.task);
+          isAutoRestored = true;
+          await statusCallback(`♻️ *Auto-restored previous session (${lastSession.id}).*`);
         }
       }
 
-      if (fs.existsSync(localMdPath)) {
-        extraInstructions += `\n\n[PERSONAL INSTRUCTIONS]\n${await fs.promises.readFile(localMdPath, 'utf8')}`;
-      }
+      if (!isAutoRestored) {
+        let extraInstructions = '';
+        const cwd = process.cwd();
+        
+        const xacodeMdPath = path.join(cwd, 'XACODE.md');
+        const localMdPath = path.join(cwd, 'XACODE.local.md');
+        
+        if (fs.existsSync(xacodeMdPath)) {
+          extraInstructions += `\n\n[PROJECT INSTRUCTIONS]\n${await fs.promises.readFile(xacodeMdPath, 'utf8')}`;
+        }
+        
+        const gitignorePath = path.join(cwd, '.gitignore');
+        if (fs.existsSync(gitignorePath)) {
+          const ignoreContent = await fs.promises.readFile(gitignorePath, 'utf8');
+          if (!ignoreContent.includes('.xacode') && !ignoreContent.includes('XACODE.local')) {
+            logger.warn('⚠️ XACODE.local.md detected but not in .gitignore. Add ".xacode*" to your .gitignore to avoid committing local config.');
+          }
+        }
 
-      const pastMemory = await this.autoMemory.loadLastMemory();
-      if (pastMemory) {
-        extraInstructions += `\n\n${pastMemory}`;
-      }
-      
-      const skillsCatalog = skillManager.getSkillsCatalog();
-      if (skillsCatalog) {
-        extraInstructions += `\n\n${skillsCatalog}`;
-      }
+        if (fs.existsSync(localMdPath)) {
+          extraInstructions += `\n\n[PERSONAL INSTRUCTIONS]\n${await fs.promises.readFile(localMdPath, 'utf8')}`;
+        }
 
-      const finalSystemPrompt = systemPrompt + extraInstructions;
-      this.memoryManager.resetSession(finalSystemPrompt, toolDefinitions as any);
+        const pastMemory = await this.autoMemory.loadLastMemory();
+        if (pastMemory) {
+          extraInstructions += `\n\n${pastMemory}`;
+        }
+        
+        const skillsCatalog = skillManager.getSkillsCatalog();
+        if (skillsCatalog) {
+          extraInstructions += `\n\n${skillsCatalog}`;
+        }
+
+        const finalSystemPrompt = systemPrompt + extraInstructions;
+        this.memoryManager.resetSession(finalSystemPrompt, toolDefinitions as any);
+        this.memoryManager.setTask(task);
+      } else {
+        // If auto restored, we still need to add the new user command to the history
+        // Wait, handleTask sets this.memoryManager.setTask(task) before this block!
+        // We already overrode setTask with lastSession.task above.
+        // So we just add the new input as a standard user message.
+        // Actually, handleTask did setTask(task) earlier, which we undid. 
+        // We will just let the bottom of this function add the user message.
+      }
     }
     
     // Programmatic Pre-filter (Layer 2)
