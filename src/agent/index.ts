@@ -380,7 +380,10 @@ RULES:
             continue;
           }
           
-          const prettyArgs = typeof args === 'string' ? args : JSON.stringify(args, null, 2);
+          let prettyArgs = typeof args === 'string' ? args : JSON.stringify(args, null, 2);
+          if (prettyArgs.length > 1000) {
+            prettyArgs = prettyArgs.substring(0, 1000) + '\n... [TRUNCATED] ...';
+          }
           await statusCallback(`🛠 *Executing Tool:* \`${functionName}\`\n\`\`\`json\n${prettyArgs}\n\`\`\``);
           logger.info(`Executing tool ${functionName}`, args);
 
