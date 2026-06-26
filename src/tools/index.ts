@@ -67,9 +67,50 @@ export const toolDefinitions = [
         properties: {
           command: { type: 'string', description: 'The bash command to execute' },
           cwd: { type: 'string', description: 'Optional. The working directory' },
-          stdin: { type: 'string', description: 'Optional input to pipe via stdin' }
+          stdin: { type: 'string', description: 'Optional input to pipe via stdin' },
+          timeoutMs: { type: 'number', description: 'Optional timeout in ms (default is from config)' }
         },
         required: ['command']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'process_list',
+      description: 'List running OS processes.',
+      parameters: {
+        type: 'object',
+        properties: {}
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'db_query',
+      description: 'Run a SQLite query using sqlite3 CLI.',
+      parameters: {
+        type: 'object',
+        properties: {
+          dbPath: { type: 'string', description: 'Path to sqlite database file' },
+          query: { type: 'string', description: 'SQL query to execute' }
+        },
+        required: ['dbPath', 'query']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'undo_file',
+      description: 'Restore the last backup of a file.',
+      parameters: {
+        type: 'object',
+        properties: {
+          targetPath: { type: 'string', description: 'Path to the file to restore' }
+        },
+        required: ['targetPath']
       }
     }
   },
@@ -409,7 +450,7 @@ export const toolDefinitions = [
       parameters: {
         type: 'object',
         properties: {
-          action: { type: 'string', enum: ['status', 'commit', 'diff', 'log'] },
+          action: { type: 'string', enum: ['status', 'commit', 'diff', 'log', 'branch'] },
           message: { type: 'string', description: 'Commit message' },
           path: { type: 'string', description: 'Path for diff' },
           maxCount: { type: 'number', description: 'Max commits for log' }
@@ -442,7 +483,7 @@ export async function executeTool(name: string, args: any, chatId?: number, sign
         result = dir.join('\n');
         break;
       case 'run_command':
-        const termRes = await terminalManager.runCommand(args.command, args.cwd, args.stdin, signal);
+        const termRes = await terminalManager.runCommand(args.command, args.cwd, args.stdin, signal, args.timeoutMs);
         result = `Exit Code: ${termRes.code}\nStdout:\n${termRes.stdout}\nStderr:\n${termRes.stderr}`;
         break;
       case 'search_code':
@@ -523,6 +564,22 @@ export async function executeTool(name: string, args: any, chatId?: number, sign
       case 'git_operation':
         result = JSON.stringify(await handleGit(args), null, 2);
         break;
+      case 'process_list': {
+        const cmd = process.platform === 'win32' ? 'tasklist' : 'ps aux';
+        const res = await terminalManager.runCommand(cmd, undefined, undefined, signal, 5000);
+        result = res.stdout || res.stderr;
+        break;
+      }
+      case 'db_query': {
+        const res = await terminalManager.runCommand(`sqlite3 "${args.dbPath}" "${args.query}"`, undefined, undefined, signal, 10000);
+        result = res.stdout || res.stderr;
+        break;
+      }
+      case 'undo_file': {
+        const { undoFile } = await import('./fs');
+        result = await undoFile(args.targetPath);
+        break;
+      }
       default:
         throw new Error(`Unknown tool: ${name}`);
     }

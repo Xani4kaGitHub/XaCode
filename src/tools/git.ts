@@ -1,7 +1,7 @@
 import { execSync } from 'child_process';
 
 export interface GitOptions {
-  action: 'status' | 'commit' | 'diff' | 'log';
+  action: 'status' | 'commit' | 'diff' | 'log' | 'branch';
   message?: string;
   path?: string;
   maxCount?: number;
@@ -68,6 +68,10 @@ export async function handleGit(args: GitOptions, basePath: string = process.cwd
       const [hash, author, time, msg] = line.split('|');
       return { hash, author, time, message: msg };
     });
+  }
+
+  if (action === 'branch') {
+    return runGit('branch -a');
   }
 
   throw new Error("Invalid git action.");

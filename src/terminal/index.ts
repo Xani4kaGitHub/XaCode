@@ -14,7 +14,7 @@ export class TerminalManager {
   /**
    * Executes a command with a timeout and returns its output.
    */
-  async runCommand(command: string, cwd: string = config.SANDBOX_DIR, stdin?: string, signal?: AbortSignal): Promise<{ stdout: string, stderr: string, code: number }> {
+  async runCommand(command: string, cwd: string = config.SANDBOX_DIR, stdin?: string, signal?: AbortSignal, timeoutMs?: number): Promise<{ stdout: string, stderr: string, code: number }> {
     if (!permissionSystem.canExecute(command)) {
       throw new Error(`Command rejected by Permission System: ${command}. Type /fullaccess enable to run dangerous commands.`);
     }
@@ -97,7 +97,7 @@ export class TerminalManager {
         const finalStderr = errStr.slice(-30000);
         
         if (isTimeout) {
-          logger.warn(`[Terminal] Command timed out after ${config.MAX_EXECUTION_TIMEOUT_MS}ms: "${command}"`);
+          logger.warn(`[Terminal] Command timed out after ${activeTimeout}ms: "${command}"`);
         } else {
           logger.info(`[Terminal] Command "${command}" exited with code ${exitCode}`);
         }
@@ -105,13 +105,14 @@ export class TerminalManager {
         resolve({ stdout: finalStdout, stderr: finalStderr, code: exitCode });
       };
 
+      const activeTimeout = timeoutMs || config.MAX_EXECUTION_TIMEOUT_MS;
       const timeoutId = setTimeout(() => {
         if (this.activeProcesses.has(processId)) {
           this.killChildSafely(child, isWin);
           finish(124, stdout, stderr + '\n[TIMEOUT KILLED]', true);
           this.activeProcesses.delete(processId);
         }
-      }, config.MAX_EXECUTION_TIMEOUT_MS);
+      }, activeTimeout);
 
       child.on('close', (code) => {
         clearTimeout(timeoutId);

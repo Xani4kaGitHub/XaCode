@@ -12,6 +12,53 @@ function checkPathAccess(resolvedPath: string) {
   }
 }
 
+async function backupFile(targetPath: string) {
+  try {
+    const resolvedPath = path.resolve(targetPath);
+    const stats = await fs.stat(resolvedPath).catch(() => null);
+    if (!stats || !stats.isFile()) return; // Nothing to backup
+    
+    // Create backup directory
+    const workspaceDir = path.resolve('.'); // Assuming cwd is workspace
+    const backupDir = path.join(workspaceDir, '.xacode', 'backups');
+    await fs.mkdir(backupDir, { recursive: true });
+    
+    const timestamp = Date.now();
+    const safeName = path.relative(workspaceDir, resolvedPath).replace(/[\\/]/g, '_');
+    const backupPath = path.join(backupDir, `${timestamp}_${safeName}`);
+    
+    await fs.copyFile(resolvedPath, backupPath);
+    logger.debug(`Backed up ${resolvedPath} to ${backupPath}`);
+  } catch (e) {
+    logger.warn(`Failed to create backup for ${targetPath}: ${e}`);
+  }
+}
+
+export async function undoFile(targetPath: string): Promise<string> {
+  const resolvedPath = path.resolve(targetPath);
+  checkPathAccess(resolvedPath);
+  
+  const workspaceDir = path.resolve('.');
+  const backupDir = path.join(workspaceDir, '.xacode', 'backups');
+  const safeName = path.relative(workspaceDir, resolvedPath).replace(/[\\/]/g, '_');
+  
+  try {
+    const files = await fs.readdir(backupDir);
+    const backups = files.filter(f => f.endsWith(`_${safeName}`)).sort().reverse();
+    
+    if (backups.length === 0) {
+      return `No backups found for ${targetPath}`;
+    }
+    
+    const latestBackup = path.join(backupDir, backups[0]);
+    await fs.copyFile(latestBackup, resolvedPath);
+    logger.info(`Restored ${resolvedPath} from ${latestBackup}`);
+    return `Restored ${targetPath} from backup successfully.`;
+  } catch (e: any) {
+    throw new Error(`Failed to restore backup: ${e.message}`);
+  }
+}
+
 export async function readFile(targetPath: string): Promise<string> {
   const resolvedPath = path.resolve(targetPath);
   checkPathAccess(resolvedPath);
@@ -23,6 +70,8 @@ export async function readFile(targetPath: string): Promise<string> {
 export async function writeFile(targetPath: string, content: string): Promise<string> {
   const resolvedPath = path.resolve(targetPath);
   checkPathAccess(resolvedPath);
+
+  await backupFile(resolvedPath);
 
   // Create directories if they don't exist
   await fs.mkdir(path.dirname(resolvedPath), { recursive: true });
@@ -64,6 +113,8 @@ export async function fileInfo(targetPath: string): Promise<any> {
 export async function editFile(targetPath: string, search: string, replace: string): Promise<string> {
   const resolvedPath = path.resolve(targetPath);
   checkPathAccess(resolvedPath);
+
+  await backupFile(resolvedPath);
 
   let content = await fs.readFile(resolvedPath, 'utf8');
   
@@ -126,6 +177,7 @@ async function walkWithCheck(dir: string, fileHandler: (fullPath: string) => Pro
 
   const entries = await fs.readdir(resolved, { withFileTypes: true });
   for (const entry of entries) {
+    if (entry.name === 'node_modules' || entry.name === '.git' || entry.name === 'dist' || entry.name === 'build' || entry.name === '.xacode') continue;
     const fullPath = path.resolve(resolved, entry.name);
     if (entry.isDirectory()) {
       await walkWithCheck(fullPath, fileHandler);
@@ -265,6 +317,8 @@ export function manageBackgroundTask(action: 'list' | 'kill' | 'status', taskId?
 export async function applyPatchToFile(targetPath: string, patchString: string): Promise<string> {
   const resolvedPath = path.resolve(targetPath);
   checkPathAccess(resolvedPath);
+
+  await backupFile(resolvedPath);
 
   const oldContent = await fs.readFile(resolvedPath, 'utf8');
   // Handle carriage returns by normalizing before patching to avoid mismatch

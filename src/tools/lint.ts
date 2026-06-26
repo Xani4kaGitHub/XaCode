@@ -7,17 +7,17 @@ import { config } from '../config';
 const execAsync = promisify(exec);
 
 export async function readLints(): Promise<any[]> {
-  const tsconfigPath = path.resolve(config.SANDBOX_DIR, 'tsconfig.json');
+  const tsconfigPath = path.resolve(process.cwd(), 'tsconfig.json');
   
   try {
     await fs.access(tsconfigPath);
   } catch {
-    throw new Error('tsconfig.json not found in sandbox. Cannot run TypeScript linting.');
+    throw new Error('tsconfig.json not found in current directory. Cannot run TypeScript linting.');
   }
 
   try {
     // Run tsc --noEmit, use pretty false to make output parseable
-    await execAsync('npx tsc --noEmit --pretty false', { cwd: config.SANDBOX_DIR });
+    await execAsync('npx tsc --noEmit --pretty false', { cwd: process.cwd() });
     return []; // No errors
   } catch (error: any) {
     // exec throws an error when exit code is non-zero (which happens if there are compilation errors)

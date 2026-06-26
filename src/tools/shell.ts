@@ -9,7 +9,7 @@ interface InteractiveSession {
 
 const sessions = new Map<string, InteractiveSession>();
 
-export async function interactiveShell(sessionId: string | null, command: string, signal?: AbortSignal, timeoutMs: number = 1500): Promise<string> {
+export async function interactiveShell(sessionId: string | null, command: string, signal?: AbortSignal, timeoutMs: number = 5000): Promise<string> {
   const id = sessionId || randomUUID();
   let session = sessions.get(id);
 
