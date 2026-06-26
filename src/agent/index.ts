@@ -443,6 +443,11 @@ RULES:
   }
 
   stop() {
+    if (!this.isExecuting) {
+      this.isStopping = false;
+      return;
+    }
+    
     this.isStopping = true;
     this.isExecuting = false;
     if (this.abortController) {
