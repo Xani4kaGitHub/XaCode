@@ -14,7 +14,7 @@ export class TerminalManager {
   /**
    * Executes a command with a timeout and returns its output.
    */
-  async runCommand(command: string, cwd: string = config.SANDBOX_DIR, stdin?: string): Promise<{ stdout: string, stderr: string, code: number }> {
+  async runCommand(command: string, cwd: string = config.SANDBOX_DIR, stdin?: string, signal?: AbortSignal): Promise<{ stdout: string, stderr: string, code: number }> {
     if (!permissionSystem.canExecute(command)) {
       throw new Error(`Command rejected by Permission System: ${command}. Type /fullaccess enable to run dangerous commands.`);
     }
@@ -115,9 +115,29 @@ export class TerminalManager {
 
       child.on('close', (code) => {
         clearTimeout(timeoutId);
+        if (signal) {
+          signal.removeEventListener('abort', onAbort);
+        }
         this.activeProcesses.delete(processId);
         finish(code ?? 0, stdout, stderr);
       });
+
+      const onAbort = () => {
+        if (this.activeProcesses.has(processId)) {
+          clearTimeout(timeoutId);
+          this.killChildSafely(child, isWin);
+          finish(130, stdout, stderr + '\n[USER KILLED]', false);
+          this.activeProcesses.delete(processId);
+        }
+      };
+
+      if (signal) {
+        if (signal.aborted) {
+          onAbort();
+        } else {
+          signal.addEventListener('abort', onAbort);
+        }
+      }
 
       child.on('error', (err) => {
         clearTimeout(timeoutId);

@@ -24,6 +24,7 @@ export class AgentSession {
   private stateChangedListener: any;
   private protectionListener: any;
   public autoMemory: AutoMemory;
+  private isStopping: boolean = false;
 
   constructor(chatId: number) {
     this.chatId = chatId;
@@ -113,14 +114,23 @@ export class AgentSession {
   }
 
   async handleTask(task: string, statusCallback: (msg: string) => Promise<void> | void) {
+    if (this.isStopping) {
+      await statusCallback('⚠️ *Agent is currently stopping. Please wait a moment before sending a new task.*');
+      return;
+    }
+    
     if (this.isExecuting) {
       // Mid-execution interruption support
+      if (this.queuedMessages.length >= 3) {
+        this.queuedMessages.shift(); // keep only the latest 3
+      }
       this.queuedMessages.push(task);
       await statusCallback('⚠️ *Message added to queue. It will be processed soon.*');
       return;
     }
 
     this.isExecuting = true;
+    this.isStopping = false;
     this.abortController = new AbortController();
     this.stateMachine.reset();
     this.stateMachine.transition(AgentState.ANALYZING_TASK);
@@ -248,6 +258,7 @@ RULES:
       }
     } finally {
       this.isExecuting = false;
+      this.isStopping = false;
       if (this.stateMachine.getState() !== AgentState.STOPPED) {
         this.stateMachine.transition(AgentState.IDLE);
       }
@@ -264,10 +275,16 @@ RULES:
       loopCount++;
 
       if (this.queuedMessages.length > 0) {
-        for (const msg of this.queuedMessages) {
-          this.memoryManager.addMessage({ role: 'user', content: msg });
-        }
+        const joinedMessages = this.queuedMessages.map(m => `- ${m}`).join('\n');
+        this.memoryManager.addMessage({ 
+          role: 'user', 
+          content: `[NEW MESSAGES FROM USER DURING EXECUTION]\n${joinedMessages}` 
+        });
         this.queuedMessages = [];
+        
+        try {
+          await statusCallback(`⚠️ *User interruption received. Adjusting plan...*`);
+        } catch (e) {}
       }
 
       await this.memoryManager.ensureCompressed();
@@ -336,7 +353,7 @@ RULES:
           await statusCallback(`🛠 *Executing Tool:* \`${functionName}\`\n\`\`\`json\n${prettyArgs}\n\`\`\``);
           logger.info(`Executing tool ${functionName}`, args);
 
-          const toolResult = await executeTool(functionName, args, this.chatId);
+          const toolResult = await executeTool(functionName, args, this.chatId, this.abortController?.signal);
           
           if (functionName === 'write_file' || functionName === 'edit_file') {
             this.memoryManager.addModifiedFile(args.targetPath);
@@ -395,6 +412,7 @@ RULES:
   }
 
   stop() {
+    this.isStopping = true;
     this.isExecuting = false;
     if (this.abortController) {
       this.abortController.abort();

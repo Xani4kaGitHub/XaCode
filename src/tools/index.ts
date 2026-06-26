@@ -421,9 +421,12 @@ export const toolDefinitions = [
 ];
 
 // Execute the tool based on the name and arguments
-export async function executeTool(name: string, args: any, chatId?: number): Promise<string> {
+export async function executeTool(name: string, args: any, chatId?: number, signal?: AbortSignal): Promise<string> {
   let result = '';
   try {
+    if (signal?.aborted) {
+      return '[USER INTERRUPTED EXECUTION]';
+    }
     switch (name) {
       case 'read_file':
         result = await readFile(args.targetPath);
@@ -439,7 +442,7 @@ export async function executeTool(name: string, args: any, chatId?: number): Pro
         result = dir.join('\n');
         break;
       case 'run_command':
-        const termRes = await terminalManager.runCommand(args.command, args.cwd, args.stdin);
+        const termRes = await terminalManager.runCommand(args.command, args.cwd, args.stdin, signal);
         result = `Exit Code: ${termRes.code}\nStdout:\n${termRes.stdout}\nStderr:\n${termRes.stderr}`;
         break;
       case 'search_code':
@@ -470,7 +473,7 @@ export async function executeTool(name: string, args: any, chatId?: number): Pro
         result = await webSearch(args.query);
         break;
       case 'interactive_shell':
-        result = await interactiveShell(args.sessionId || null, args.command);
+        result = await interactiveShell(args.sessionId || null, args.command, signal);
         break;
       case 'manage_todos':
         result = await manageTodos(args.action, args.textOrId);
@@ -524,6 +527,9 @@ export async function executeTool(name: string, args: any, chatId?: number): Pro
         throw new Error(`Unknown tool: ${name}`);
     }
   } catch (error: any) {
+    if (signal?.aborted || error.message?.includes('USER KILLED')) {
+      return '[USER INTERRUPTED EXECUTION]';
+    }
     result = `Error executing tool ${name}: ${error.message || String(error)}`;
   }
   
