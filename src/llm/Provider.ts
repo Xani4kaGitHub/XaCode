@@ -206,7 +206,7 @@ class AnthropicProvider implements LLMProvider {
         const start = Date.now();
         const headers: any = {
           'Content-Type': 'application/json',
-          'x-api-key': config.DEEPSEEK_API_KEY,
+          'x-api-key': config.ANTHROPIC_API_KEY || config.DEEPSEEK_API_KEY,
           'anthropic-version': '2023-06-01'
         };
 
@@ -222,7 +222,7 @@ class AnthropicProvider implements LLMProvider {
           body.tool_choice = { type: 'auto' };
         }
 
-        const fetchRes = await fetch(config.DEEPSEEK_BASE_URL, {
+        const fetchRes = await fetch(config.ANTHROPIC_BASE_URL, {
           method: 'POST',
           headers,
           body: JSON.stringify(body),
@@ -315,8 +315,10 @@ export class LLMFactory {
     switch(name.toLowerCase()) {
       case 'deepseek':
       case 'openai':
+      case 'freemodel':
         return new DeepSeekProvider();
       case 'anthropic':
+      case 'claude':
       case 'openmodel':
         return new AnthropicProvider();
       default:

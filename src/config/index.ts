@@ -9,6 +9,8 @@ export interface Config {
   DEEPSEEK_API_KEY: string;
   DEEPSEEK_MODEL: string;
   DEEPSEEK_BASE_URL: string;
+  ANTHROPIC_API_KEY: string;
+  ANTHROPIC_BASE_URL: string;
   LLM_PROVIDER: string;
   ALLOWED_USER_IDS: number[];
   SANDBOX_DIR: string;
@@ -28,9 +30,11 @@ export interface Config {
 
 export const config: Config = {
   TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN || '',
-  DEEPSEEK_API_KEY: process.env.DEEPSEEK_API_KEY || '',
+  DEEPSEEK_API_KEY: process.env.DEEPSEEK_API_KEY || process.env.OPENAI_API_KEY || '',
   DEEPSEEK_MODEL: process.env.DEEPSEEK_MODEL || 'deepseek-chat',
-  DEEPSEEK_BASE_URL: process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com',
+  DEEPSEEK_BASE_URL: process.env.DEEPSEEK_BASE_URL || process.env.OPENAI_BASE_URL || 'https://api.deepseek.com',
+  ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY || '',
+  ANTHROPIC_BASE_URL: process.env.ANTHROPIC_BASE_URL || 'https://api.anthropic.com/v1/messages',
   LLM_PROVIDER: process.env.LLM_PROVIDER || 'deepseek',
   ALLOWED_USER_IDS: (process.env.ALLOWED_USER_IDS || '').split(',').map(id => parseInt(id.trim(), 10)).filter(id => !isNaN(id)),
   SANDBOX_DIR: process.env.SANDBOX_DIR || path.resolve(process.cwd(), 'sandbox'),
@@ -52,8 +56,8 @@ export function validateConfig() {
   if (!config.TELEGRAM_BOT_TOKEN) {
     throw new Error('TELEGRAM_BOT_TOKEN is missing in environment variables');
   }
-  if (!config.DEEPSEEK_API_KEY) {
-    throw new Error('DEEPSEEK_API_KEY is missing in environment variables');
+  if (!config.DEEPSEEK_API_KEY && !config.ANTHROPIC_API_KEY) {
+    console.warn('WARNING: No LLM API key provided. Bot will likely fail on LLM calls.');
   }
   if (config.ALLOWED_USER_IDS.length === 0) {
     console.warn('WARNING: ALLOWED_USER_IDS is empty. No one will be able to use the bot.');
