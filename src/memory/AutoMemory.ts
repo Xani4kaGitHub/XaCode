@@ -44,14 +44,16 @@ export interface Checkpoint {
 
 export class AutoMemory {
   private baseDir: string;
-  private projectHash: string | null = null;
+  private projectHash: string;
   private memoryFilePath: string | null = null;
   private currentSessionId: string | null = null;
   private sessionStartedAt: string | null = null;
+  public chatId: number | string;
 
-  constructor() {
+  constructor(chatId: number | string = 0) {
+    this.chatId = chatId;
     this.baseDir = path.join(os.homedir(), '.xacode', 'projects');
-    this.projectHash = 'global';
+    this.projectHash = chatId === 0 ? 'global' : `chat_${chatId}`;
     this.memoryFilePath = path.join(this.baseDir, this.projectHash, 'memory.md');
     this.migrateOldSessions();
   }
@@ -87,7 +89,7 @@ export class AutoMemory {
   }
 
   private getProjectHash(): string {
-    return 'global';
+    return this.projectHash;
   }
 
   public initNewSession() {
@@ -356,4 +358,4 @@ export class AutoMemory {
   }
 }
 
-export const autoMemory = new AutoMemory();
+export const autoMemory = new AutoMemory(0);

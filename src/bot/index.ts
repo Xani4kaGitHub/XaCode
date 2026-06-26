@@ -695,7 +695,7 @@ export class BotService {
       }
       case '/sessions':
       case '/s': {
-        const sessions = await autoMemory.listSessions();
+        const sessions = await agentOrchestrator.getSession(chatId).autoMemory.listSessions();
         if (sessions.length === 0) {
           await this.bot.sendMessage(chatId, '📋 No saved sessions found.');
         } else {
@@ -741,13 +741,13 @@ export class BotService {
            await this.bot.sendMessage(chatId, '❌ Usage: `/cp "name"`', { parse_mode: 'Markdown' });
            break;
         }
-        const success = await autoMemory.saveCheckpoint(cpName.replace(/"/g, ''), 99999, 'Saved via Telegram');
+        const success = await agentOrchestrator.getSession(chatId).autoMemory.saveCheckpoint(cpName.replace(/"/g, ''), 99999, 'Saved via Telegram');
         await this.bot.sendMessage(chatId, success ? '✅ Checkpoint saved!' : '❌ Failed to save checkpoint.');
         break;
       }
       case '/checkpoints':
       case '/cps': {
-        const cps = await autoMemory.listCheckpoints();
+        const cps = await agentOrchestrator.getSession(chatId).autoMemory.listCheckpoints();
         if (cps.length === 0) {
           await this.bot.sendMessage(chatId, '📋 No saved checkpoints found.');
         } else {
@@ -776,13 +776,13 @@ export class BotService {
           await this.bot.sendMessage(chatId, '❌ Usage: `/rename <sessionId> "new name"`', { parse_mode: 'Markdown' });
           break;
         }
-        const r = await autoMemory.renameSession(match[1], match[2].replace(/"/g, ''));
+        const r = await agentOrchestrator.getSession(chatId).autoMemory.renameSession(match[1], match[2].replace(/"/g, ''));
         await this.bot.sendMessage(chatId, r ? '✅ Session renamed.' : '❌ Session not found.');
         break;
       }
       case '/delete': {
         const parts = text.split(' ');
-        const r = await autoMemory.deleteSession(parts[1]);
+        const r = await agentOrchestrator.getSession(chatId).autoMemory.deleteSession(parts[1]);
         await this.bot.sendMessage(chatId, r ? '✅ Session deleted.' : '❌ Session not found.');
         break;
       }
@@ -796,7 +796,7 @@ export class BotService {
         break;
       }
       case '/new': {
-        autoMemory.initNewSession();
+        agentOrchestrator.getSession(chatId).autoMemory.initNewSession();
         agentOrchestrator.getSession(chatId).memoryManager.resetSession('You are XaCode.');
         const newMsg = `✨ *New Session Started*\n`
           + `────────────────────────\n`

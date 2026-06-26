@@ -1,7 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 import { config } from '../config';
-import { MemoryManager, ChatMessage, autoMemory } from '../memory';
+import { MemoryManager, ChatMessage } from '../memory';
+import { AutoMemory } from '../memory/AutoMemory';
 import { toolDefinitions, executeTool } from '../tools';
 import { logger } from '../logger';
 import { llmProvider } from '../llm/Provider';
@@ -22,9 +23,11 @@ export class AgentSession {
   private abortController: AbortController | null = null;
   private stateChangedListener: any;
   private protectionListener: any;
+  public autoMemory: AutoMemory;
 
   constructor(chatId: number) {
     this.chatId = chatId;
+    this.autoMemory = new AutoMemory(chatId);
     this.memoryManager = new MemoryManager();
     this.stateMachine = new StateMachine(chatId);
 
@@ -62,7 +65,7 @@ export class AgentSession {
     const messages = this.memoryManager.getHistory();
     const metrics = metricsTracker.getMetrics();
 
-    await autoMemory.saveSessionSnapshot({
+    await this.autoMemory.saveSessionSnapshot({
       date: new Date().toISOString().split('T')[0],
       task: taskCtx.originalRequest,
       status: state,
@@ -76,7 +79,7 @@ export class AgentSession {
 
   async resumeSession(sessionId: string | undefined, statusCallback: (msg: string) => Promise<void> | void) {
     if (this.isExecuting) return;
-    const session = await autoMemory.loadSession(sessionId);
+    const session = await this.autoMemory.loadSession(sessionId);
     if (!session) {
       await statusCallback('❌ *Session not found.*');
       return;
@@ -91,12 +94,12 @@ export class AgentSession {
 
   async gotoCheckpoint(checkpointId: number, statusCallback: (msg: string) => Promise<void> | void) {
     if (this.isExecuting) return;
-    const cp = await autoMemory.getCheckpoint(checkpointId);
+    const cp = await this.autoMemory.getCheckpoint(checkpointId);
     if (!cp) {
       await statusCallback(`❌ *Checkpoint ${checkpointId} not found.*`);
       return;
     }
-    const session = await autoMemory.loadSession(cp.sessionId);
+    const session = await this.autoMemory.loadSession(cp.sessionId);
     if (!session) {
       await statusCallback('❌ *Associated session not found.*');
       return;
@@ -161,7 +164,7 @@ RULES:
         extraInstructions += `\n\n[PERSONAL INSTRUCTIONS]\n${await fs.promises.readFile(localMdPath, 'utf8')}`;
       }
 
-      const pastMemory = await autoMemory.loadLastMemory();
+      const pastMemory = await this.autoMemory.loadLastMemory();
       if (pastMemory) {
         extraInstructions += `\n\n${pastMemory}`;
       }
