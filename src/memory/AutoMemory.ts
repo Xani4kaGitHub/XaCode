@@ -103,6 +103,10 @@ export class AutoMemory {
     return this.currentSessionId;
   }
 
+  public setCurrentSessionId(id: string) {
+    this.currentSessionId = id;
+  }
+
   public async loadLastMemory(): Promise<string | null> {
     const hash = this.getProjectHash();
     if (!this.memoryFilePath) return null;

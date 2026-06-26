@@ -25,6 +25,13 @@ export class BotService {
     logger.info('Telegram Bot initialized.');
   }
 
+  private escapeHTML(text: string): string {
+    return text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+
   private setupListeners() {
     interactionEmitter.on('ask_choice', async ({ chatId, requestId, question, options }) => {
       const inlineKeyboard = options.map((opt: string, i: number) => [
@@ -68,8 +75,8 @@ export class BotService {
           this.pendingCustomChoices.delete(chatId);
           this.pendingCustomChoiceTexts.set(requestId, text);
           
-          await this.bot.sendMessage(chatId, `Вы написали:\n_${text}_\n\nЧто с этим сделать?`, {
-            parse_mode: 'Markdown',
+          await this.bot.sendMessage(chatId, `Вы написали:\n<i>${this.escapeHTML(text)}</i>\n\nЧто с этим сделать?`, {
+            parse_mode: 'HTML',
             reply_markup: {
               inline_keyboard: [
                 [{ text: '✅ Отправить', callback_data: `choice_custom_send:${requestId}` }],
@@ -317,10 +324,10 @@ export class BotService {
           
           await this.bot.answerCallbackQuery(query.id, { text: `✅ Selected: ${chosenText}` });
           try {
-            await this.bot.editMessageText(`❓ *Agent asks:*\n_${query.message?.text?.replace('❓ Agent asks:\\n', '')}_\n\n✅ *User selected:* ${chosenText}`, {
+            await this.bot.editMessageText(`❓ <b>Agent asks:</b>\n<i>${this.escapeHTML(query.message?.text?.replace('❓ Agent asks:\n', '') || '')}</i>\n\n✅ <b>User selected:</b> ${this.escapeHTML(chosenText)}`, {
               chat_id: chatId,
               message_id: query.message?.message_id,
-              parse_mode: 'Markdown'
+              parse_mode: 'HTML'
             });
           } catch (e) {}
         } else if (query.data.startsWith('choice_custom:')) {
@@ -330,10 +337,10 @@ export class BotService {
           
           await this.bot.answerCallbackQuery(query.id);
           try {
-             await this.bot.editMessageText(`❓ *Agent asks:*\n_${questionText}_\n\n✍️ *Пожалуйста, напишите свой вариант ответным сообщением.*`, {
+             await this.bot.editMessageText(`❓ <b>Agent asks:</b>\n<i>${this.escapeHTML(questionText)}</i>\n\n✍️ <b>Пожалуйста, напишите свой вариант ответным сообщением.</b>`, {
                chat_id: chatId,
                message_id: query.message?.message_id,
-               parse_mode: 'Markdown'
+               parse_mode: 'HTML'
              });
           } catch (e) {}
         } else if (query.data.startsWith('choice_custom_send:')) {
@@ -347,10 +354,10 @@ export class BotService {
            this.pendingCustomChoiceTexts.delete(requestId);
            await this.bot.answerCallbackQuery(query.id, { text: '✅ Отправлено!' });
            try {
-             await this.bot.editMessageText(`✅ *User selected (custom):*\n_${textToSend}_`, {
+             await this.bot.editMessageText(`✅ <b>User selected (custom):</b>\n<i>${this.escapeHTML(textToSend)}</i>`, {
                chat_id: chatId,
                message_id: query.message?.message_id,
-               parse_mode: 'Markdown'
+               parse_mode: 'HTML'
              });
            } catch(e) {}
         } else if (query.data.startsWith('choice_custom_rewrite:')) {
@@ -358,10 +365,10 @@ export class BotService {
            this.pendingCustomChoices.set(chatId, { requestId, question: 'Пожалуйста, напишите свой вариант ответа заново.' });
            await this.bot.answerCallbackQuery(query.id);
            try {
-             await this.bot.editMessageText(`✍️ *Пожалуйста, напишите свой вариант ответным сообщением.*`, {
+             await this.bot.editMessageText(`✍️ <b>Пожалуйста, напишите свой вариант ответным сообщением.</b>`, {
                chat_id: chatId,
                message_id: query.message?.message_id,
-               parse_mode: 'Markdown'
+               parse_mode: 'HTML'
              });
            } catch(e) {}
         } else {
