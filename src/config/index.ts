@@ -26,6 +26,7 @@ export interface Config {
   PASTE_LOGS_EXPIRY_MINUTES: number;
   SMART_MEMORY_MODE: boolean;
   STUCK_LOOP_THRESHOLD: number;
+  AUTO_RESTORE_SESSION: boolean;
 }
 
 export const config: Config = {
@@ -50,6 +51,7 @@ export const config: Config = {
   PASTE_LOGS_EXPIRY_MINUTES: parseInt(process.env.PASTE_LOGS_EXPIRY_MINUTES || '10', 10),
   SMART_MEMORY_MODE: process.env.SMART_MEMORY_MODE !== 'false', // default true
   STUCK_LOOP_THRESHOLD: parseInt(process.env.STUCK_LOOP_THRESHOLD || '3', 10),
+  AUTO_RESTORE_SESSION: process.env.AUTO_RESTORE_SESSION === 'true',
 };
 
 export function validateConfig() {

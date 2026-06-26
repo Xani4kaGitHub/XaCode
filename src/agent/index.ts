@@ -153,7 +153,7 @@ RULES:
 
     if (this.memoryManager.getHistory().length === 0) {
       let isAutoRestored = false;
-      if (!this.autoMemory.getCurrentSessionId()) {
+      if (!this.autoMemory.getCurrentSessionId() && config.AUTO_RESTORE_SESSION) {
         const lastSession = await this.autoMemory.loadSession();
         if (lastSession && lastSession.messages && lastSession.messages.length > 0) {
           // Auto-restore the crashed/previous session properly into the context
