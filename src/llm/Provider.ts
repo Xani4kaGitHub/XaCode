@@ -155,7 +155,14 @@ class AnthropicProvider implements LLMProvider {
         }
       } else if (msg.role === 'assistant') {
         if (msg.anthropic_content) {
-          anthropicMessages.push({ role: 'assistant', content: msg.anthropic_content });
+          // Sanitize thinking blocks to prevent 'missing field thinking' API errors
+          const safeContent = msg.anthropic_content.map((block: any) => {
+            if (block.type === 'thinking' && typeof block.thinking !== 'string') {
+              return { ...block, thinking: block.reasoning || "..." };
+            }
+            return block;
+          });
+          anthropicMessages.push({ role: 'assistant', content: safeContent });
         } else {
           const content = [];
           if (msg.content) content.push({ type: 'text', text: msg.content });
