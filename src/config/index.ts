@@ -23,6 +23,7 @@ export interface Config {
   PASTE_LOGS_ENABLED: boolean;
   PASTE_LOGS_EXPIRY_MINUTES: number;
   SMART_MEMORY_MODE: boolean;
+  STUCK_LOOP_THRESHOLD: number;
 }
 
 export const config: Config = {
@@ -44,6 +45,7 @@ export const config: Config = {
   PASTE_LOGS_ENABLED: process.env.PASTE_LOGS_ENABLED === 'true', // default false
   PASTE_LOGS_EXPIRY_MINUTES: parseInt(process.env.PASTE_LOGS_EXPIRY_MINUTES || '10', 10),
   SMART_MEMORY_MODE: process.env.SMART_MEMORY_MODE !== 'false', // default true
+  STUCK_LOOP_THRESHOLD: parseInt(process.env.STUCK_LOOP_THRESHOLD || '3', 10),
 };
 
 export function validateConfig() {

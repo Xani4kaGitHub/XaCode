@@ -322,12 +322,12 @@ RULES:
           if (recentActions.length > 5) recentActions.shift();
           
           const duplicateCount = recentActions.filter(a => a === actionHash).length;
-          if (duplicateCount >= 3) {
+          if (config.STUCK_LOOP_THRESHOLD > 0 && duplicateCount >= config.STUCK_LOOP_THRESHOLD) {
             this.memoryManager.addMessage({
               role: 'tool',
               tool_call_id: toolCall.id,
               name: functionName,
-              content: '[SYSTEM WARNING] You have executed this exact same tool with these exact same arguments 3 times in a row. You are stuck in a loop. STOP doing this and try a completely different approach, or ask the user for help.'
+              content: `[SYSTEM WARNING] You have executed this exact same tool with these exact same arguments ${duplicateCount} times in a row. You are stuck in a loop. STOP doing this and try a completely different approach, or ask the user for help.`
             });
             continue;
           }
@@ -348,10 +348,10 @@ RULES:
             if (recentToolResults.length > 5) recentToolResults.shift();
             
             const duplicateResultCount = recentToolResults.filter(r => r === toolResult.trim()).length;
-            if (duplicateResultCount >= 3) {
-              const warningMsg = `[SYSTEM WARNING] You have received this exact same output/error from your tools 3 times recently:\n${toolResult.substring(0, 300)}\n\nYou are repeating the same mistake or running into the same blocker. DO NOT keep trying the same command or similar failing actions. You must change your approach completely, investigate the cause of the failure, or ask the user for advice/help in your response.`;
+            if (config.STUCK_LOOP_THRESHOLD > 0 && duplicateResultCount >= config.STUCK_LOOP_THRESHOLD) {
+              const warningMsg = `[SYSTEM WARNING] You have received this exact same output/error from your tools ${duplicateResultCount} times recently:\n${toolResult.substring(0, 300)}\n\nYou are repeating the same mistake or running into the same blocker. DO NOT keep trying the same command or similar failing actions. You must change your approach completely, investigate the cause of the failure, or ask the user for advice/help in your response.`;
               finalResult = `${toolResult}\n\n${warningMsg}`;
-              await statusCallback(`⚠️ *Stuck Loop Warning:* Agent received the same error/result 3 times.`);
+              await statusCallback(`⚠️ *Stuck Loop Warning:* Agent received the same error/result ${duplicateResultCount} times.`);
             }
           }
 
