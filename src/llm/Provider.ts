@@ -208,9 +208,11 @@ class AnthropicProvider implements LLMProvider {
     while (attempt < this.maxRetries) {
       try {
         const start = Date.now();
+        const apiKey = config.ANTHROPIC_API_KEY || config.DEEPSEEK_API_KEY;
         const headers: any = {
           'Content-Type': 'application/json',
-          'x-api-key': config.ANTHROPIC_API_KEY || config.DEEPSEEK_API_KEY,
+          'x-api-key': apiKey,
+          'Authorization': `Bearer ${apiKey}`,
           'anthropic-version': '2023-06-01',
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
         };
