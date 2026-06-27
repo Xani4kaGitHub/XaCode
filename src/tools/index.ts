@@ -249,6 +249,20 @@ export const toolDefinitions = [
   {
     type: 'function',
     function: {
+      name: 'ask_user',
+      description: 'Ask the user a clarifying question or present a plan for approval. Execution will pause until the user responds.',
+      parameters: {
+        type: 'object',
+        properties: {
+          question: { type: 'string', description: 'The question or plan to ask the user' }
+        },
+        required: ['question']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
       name: 'ask_user_choice',
       description: 'Ask the user a multiple choice question and wait for their response.',
       parameters: {

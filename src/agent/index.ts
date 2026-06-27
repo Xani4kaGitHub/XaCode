@@ -384,6 +384,19 @@ RULES:
           if (prettyArgs.length > 1000) {
             prettyArgs = prettyArgs.substring(0, 1000) + '\n... [TRUNCATED] ...';
           }
+          
+          if (functionName === 'ask_user') {
+            await statusCallback(`❓ *Agent asks:*\n${args.question}`);
+            this.memoryManager.addMessage({
+              role: 'tool',
+              tool_call_id: toolCall.id,
+              name: functionName,
+              content: '[SYSTEM] Execution paused. The user sees your question and will reply soon.'
+            });
+            this.isExecuting = false;
+            break;
+          }
+
           await statusCallback(`🛠 *Executing Tool:* \`${functionName}\`\n\`\`\`json\n${prettyArgs}\n\`\`\``);
           logger.info(`Executing tool ${functionName}`, args);
 
